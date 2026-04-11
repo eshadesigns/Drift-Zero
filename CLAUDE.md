@@ -10,6 +10,17 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 Two layers:
 - **`frontend/`** — React + Vite dashboard with CesiumJS 3D globe
+
+frontend/
+  src/
+    main.jsx       ← entry point — GlobeView OUTSIDE StrictMode
+    components/
+      GlobeView.jsx        ← Kushagra — DO NOT MODIFY
+      SatelliteModal.jsx   ← Kushagra — DO NOT MODIFY
+      dashboard/           ← Madhu
+    data/
+      mockData.js
+
 - **`backend/`** — Python orbital mechanics pipeline, Databricks integration, FastAPI, Claude API alerts
 
 ---
@@ -135,3 +146,17 @@ DATABRICKS_TOKEN=...
 - TEME frame used throughout backend — frontend handles coordinate conversion for globe rendering
 - Data age is tagged on every TLE record and surfaced in the UI
 - Solar weather (NOAA SWPC) is used to flag low-confidence conjunctions during high-Kp periods
+- - GlobeView.jsx must stay outside React StrictMode — double mount crashes Cesium
+- All dashboard panels use position: absolute overlays on top of the globe
+- Pure inline styles in dashboard components, no Tailwind
+- npm run dev must be run from frontend/, not repo root
+
+
+
+
+## Team
+- Abhay: backend/shield — conjunction detection pipeline
+- Taher/Nikhil: Databricks pipeline, TLE ingestion, ML
+- Madhu: dashboard UI components
+- Kushagra: GlobeView, globe rendering — DO NOT MODIFY these files
+- Esha: Rogue, Anomaly detection

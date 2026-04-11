@@ -1,121 +1,194 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useState, useCallback, useEffect } from 'react'
+import StatsBar from './components/dashboard/StatsBar'
+import AlertQueue from './components/dashboard/AlertQueue'
+import ManeuverPanel from './components/dashboard/ManeuverPanel'
+import NaturalLanguageAlert from './components/dashboard/NaturalLanguageAlert'
+import CascadeAnalysis from './components/dashboard/CascadeAnalysis'
 
-function App() {
-  const [count, setCount] = useState(0)
+const PANEL_MIN = 15   // % of screen width
+const PANEL_MAX = 55
+const DEFAULT_PANEL = 30
+
+export default function DashboardOverlay() {
+  const [selectedConjunction, setSelectedConjunction] = useState(null)
+  const [panelPct, setPanelPct] = useState(DEFAULT_PANEL)
+  const [collapsed, setCollapsed] = useState(null) // null | 'panels'
+  const [isDragging, setIsDragging] = useState(false)
+  const [dividerHover, setDividerHover] = useState(false)
+
+  // ── Drag-to-resize ──────────────────────────────────────────────────────────
+  const onDividerMouseDown = useCallback((e) => {
+    e.preventDefault()
+    setIsDragging(true)
+    setCollapsed(null)
+  }, [])
+
+  useEffect(() => {
+    if (!isDragging) return
+    const onMouseMove = (e) => {
+      const pct = ((window.innerWidth - e.clientX) / window.innerWidth) * 100
+      setPanelPct(Math.min(PANEL_MAX, Math.max(PANEL_MIN, pct)))
+    }
+    const onMouseUp = () => setIsDragging(false)
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [isDragging])
+
+  // ── Sync CSS vars → globe wrapper reads these to shift itself ───────────────
+  useEffect(() => {
+    const activePct = collapsed === 'panels' ? 0 : panelPct
+    document.documentElement.style.setProperty('--panel-pct', activePct)
+    document.documentElement.style.setProperty('--panel-transition', isDragging ? 'none' : 'transform 0.25s ease')
+  }, [panelPct, collapsed, isDragging])
+
+  // ── Collapse helpers ────────────────────────────────────────────────────────
+  const toggleCollapse = () => {
+    if (collapsed === 'panels') {
+      setCollapsed(null)
+      setPanelPct(DEFAULT_PANEL)
+    } else {
+      setCollapsed('panels')
+    }
+  }
+
+  // ── Derived widths ──────────────────────────────────────────────────────────
+  const panelWidth = collapsed === 'panels' ? '0%' : `${panelPct}%`
+  const dividerRight = collapsed === 'panels' ? 0 : `${panelPct}%`
+  const transition = isDragging ? 'none' : 'width 0.25s ease, right 0.25s ease'
 
   return (
     <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+      {/* ── StatsBar — top ───────────────────────────────────────────────────── */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+        pointerEvents: 'auto',
+      }}>
+        <StatsBar />
+      </div>
+
+      {/* ── Right panel ──────────────────────────────────────────────────────── */}
+      <div style={{
+        position: 'absolute',
+        top: 44,
+        right: 0,
+        bottom: 0,
+        width: panelWidth,
+        transition,
+        zIndex: 10,
+        overflow: 'hidden',
+        pointerEvents: 'auto',
+      }}>
+        <div style={{
+          width: '100%',
+          height: '100%',
+          background: 'rgba(3, 7, 18, 0.92)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          borderLeft: '1px solid rgba(255,255,255,0.07)',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}>
+          <AlertQueue
+            selected={selectedConjunction}
+            onSelect={setSelectedConjunction}
+          />
+          {selectedConjunction && (
+            <>
+              <NaturalLanguageAlert conjunction={selectedConjunction} />
+              <ManeuverPanel conjunction={selectedConjunction} />
+              <CascadeAnalysis conjunction={selectedConjunction} />
+            </>
+          )}
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
+      </div>
+
+      {/* ── Divider / toggle tab ─────────────────────────────────────────────── */}
+      <div
+        onMouseDown={onDividerMouseDown}
+        onMouseEnter={() => setDividerHover(true)}
+        onMouseLeave={() => setDividerHover(false)}
+        style={{
+          position: 'absolute',
+          top: 44,
+          bottom: 0,
+          right: dividerRight,
+          width: collapsed === 'panels' ? 20 : 6,
+          zIndex: 11,
+          cursor: collapsed === 'panels' ? 'pointer' : 'col-resize',
+          transition,
+          pointerEvents: 'auto',
+          background: isDragging
+            ? 'rgba(34,211,238,0.3)'
+            : dividerHover
+              ? 'rgba(34,211,238,0.12)'
+              : 'rgba(255,255,255,0.04)',
+          borderLeft: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
+        }}
+      >
+        {/* Collapse / expand button */}
         <button
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={toggleCollapse}
+          style={{
+            width: 18,
+            height: 18,
+            borderRadius: 3,
+            background: dividerHover || collapsed === 'panels'
+              ? 'rgba(34,211,238,0.15)'
+              : 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            color: '#94a3b8',
+            cursor: 'pointer',
+            fontSize: 13,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            lineHeight: 1,
+            padding: 0,
+            opacity: dividerHover || collapsed === 'panels' ? 1 : 0,
+            transition: 'opacity 0.15s',
+          }}
+          title={collapsed === 'panels' ? 'Expand panels' : 'Collapse panels'}
         >
-          Count is {count}
+          {collapsed === 'panels' ? '‹' : '›'}
         </button>
-      </section>
 
-      <div className="ticks"></div>
+        {/* Drag handle dots — visible on hover */}
+        {collapsed !== 'panels' && (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 3,
+            opacity: dividerHover ? 0.6 : 0.2,
+            transition: 'opacity 0.15s',
+          }}>
+            {[0,1,2,3,4].map(i => (
+              <div key={i} style={{
+                width: 3,
+                height: 3,
+                borderRadius: '50%',
+                background: '#94a3b8',
+              }} />
+            ))}
+          </div>
+        )}
+      </div>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
+      {/* Cursor style during drag */}
+      {isDragging && (
+        <style>{`* { cursor: col-resize !important; user-select: none !important; }`}</style>
+      )}
     </>
   )
 }
-
-export default App
