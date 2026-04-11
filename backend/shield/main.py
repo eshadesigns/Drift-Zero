@@ -696,6 +696,11 @@ def run_pipeline(
 
 app = FastAPI(title="Drift Zero -- Shield API", version="0.2.0")
 
+# Simple in-memory cache: norad_id -> list of conjunction event dicts.
+# Populated by GET /conjunctions/{norad_id}; read by GET /maneuvers/{norad_id}/{event_id}.
+# No expiry needed for demo use.
+_conjunction_cache: dict[int, list[dict]] = {}
+
 
 @app.get("/satellite/{norad_id}")
 async def get_satellite(norad_id: int):
@@ -729,21 +734,28 @@ async def get_satellite(norad_id: int):
 @app.get("/maneuvers/{norad_id}/{event_id}")
 async def get_maneuvers(norad_id: int, event_id: str):
     """
-    Run the conjunction pipeline for norad_id, find the matching event_id,
-    and return three maneuver options (Maximum Safety, Balanced, Fuel Efficient).
+    Return three maneuver options for a specific conjunction event.
+
+    Requires that GET /conjunctions/{norad_id} has been called first to
+    populate the cache. Returns 409 if the cache is empty for this satellite
+    (so the caller knows to run /conjunctions first rather than getting a
+    misleading 404).
     """
-    try:
-        events = run_pipeline(norad_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    events = _conjunction_cache.get(norad_id)
+    if events is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"No conjunction data cached for NORAD {norad_id}. "
+                f"Call GET /conjunctions/{norad_id} first."
+            ),
+        )
 
     event = next((e for e in events if e["event_id"] == event_id), None)
     if event is None:
         raise HTTPException(
             status_code=404,
-            detail=f"Event {event_id!r} not found in conjunction results for NORAD {norad_id}",
+            detail=f"Event {event_id!r} not found in cached results for NORAD {norad_id}",
         )
 
     return compute_maneuvers(event)
@@ -768,6 +780,8 @@ async def get_conjunctions(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    _conjunction_cache[norad_id] = events
 
     filtered = [e for e in events if e["risk_score"] >= min_risk]
     return {
