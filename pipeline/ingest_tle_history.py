@@ -238,43 +238,31 @@ def upload_and_register(df: pd.DataFrame, warehouse_id: str) -> None:
 
     file_path = f"{VOLUME_PATH}/tle_history.parquet"
 
-    log.info(f"Uploading {len(df):,} rows to {file_path}...")
-    parquet_bytes = to_parquet_bytes(df)
-    w.files.upload(
-        file_path=file_path,
-        contents=io.BytesIO(parquet_bytes),
-        overwrite=True,
+    # Cast timestamps to microseconds — Databricks rejects nanosecond precision
+    datetime_cols = ["EPOCH", "CREATION_DATE", "LAUNCH_DATE"]
+    for col in datetime_cols:
+        if col in df.columns:
+            df[col] = df[col].astype("datetime64[us, UTC]")
+
+    buf = io.BytesIO()
+    df.to_parquet(buf, index=False, engine="pyarrow")
+    size_mb = buf.tell() / 1_048_576
+    buf.seek(0)
+
+    log.info(f"Uploading {len(df):,} rows ({size_mb:.1f} MB) to {file_path}...")
+    w.files.upload(file_path=file_path, contents=buf, overwrite=True)
+    log.info("Upload complete")
+
+    log.info(f"Creating Delta table {TABLE_NAME}...")
+    run_sql(
+        w,
+        f"""
+        CREATE OR REPLACE TABLE {TABLE_NAME}
+        USING DELTA
+        AS SELECT * FROM parquet.`{file_path}`
+        """,
+        warehouse_id,
     )
-    log.info(f"Upload complete ({len(parquet_bytes) / 1_048_576:.1f} MB)")
-
-    exists = table_exists(w, warehouse_id)
-
-    if not exists:
-        # First run: create the table directly from the parquet
-        log.info(f"Creating Delta table {TABLE_NAME}...")
-        run_sql(
-            w,
-            f"""
-            CREATE TABLE {TABLE_NAME}
-            USING DELTA
-            AS SELECT * FROM parquet.`{file_path}`
-            """,
-            warehouse_id,
-        )
-    else:
-        # Subsequent runs: merge on composite key, insert only new records
-        log.info(f"Merging into existing table {TABLE_NAME}...")
-        run_sql(
-            w,
-            f"""
-            MERGE INTO {TABLE_NAME} AS target
-            USING (SELECT * FROM parquet.`{file_path}`) AS source
-            ON target.NORAD_CAT_ID = source.NORAD_CAT_ID
-               AND target.EPOCH = source.EPOCH
-            WHEN NOT MATCHED THEN INSERT *
-            """,
-            warehouse_id,
-        )
 
     log.info(f"Table {TABLE_NAME} ready")
 
