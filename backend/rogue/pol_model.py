@@ -1,6 +1,6 @@
 import numpy as np
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 @dataclass
@@ -23,6 +23,8 @@ class SatelliteBaseline:
 
     def update(self, features: dict):
         for k, v in features.items():
+            if not isinstance(v, (int, float)):
+                continue  # skip non-numeric fields (epoch datetime, etc.)
             if k not in self.means:
                 self.means[k] = v
                 self.vars_[k] = 0.0
@@ -32,7 +34,7 @@ class SatelliteBaseline:
                 self.vars_[k] = (self.ALPHA * (v - self.means[k])**2
                                  + (1 - self.ALPHA) * self.vars_[k])
         self.n_obs += 1
-        self.last_updated = datetime.utcnow()
+        self.last_updated = datetime.now(timezone.utc)
 
     def zscore(self, feature: str, value: float) -> float:
         std = np.sqrt(self.vars_.get(feature, 1.0))
