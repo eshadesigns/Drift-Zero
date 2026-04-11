@@ -19,7 +19,7 @@ import io
 import os
 import sys
 import logging
-
+import time
 import pandas as pd
 import requests
 from databricks.sdk import WorkspaceClient
@@ -37,6 +37,20 @@ log = logging.getLogger(__name__)
 
 SPACETRACK_LOGIN_URL = "https://www.space-track.org/ajaxauth/login"
 
+# All active LEO satellites ordered by NORAD_CAT_ID descending so newer
+# constellations (Starlink 44xxx+, OneWeb 47xxx+) are fetched first.
+# Limit raised to 8000 to cover the full active LEO population.
+SPACETRACK_LEO_URL = (
+    "https://www.space-track.org/basicspacedata/query"
+    "/class/gp"
+    "/DECAY_DATE/null-val"
+    "/PERIAPSIS/%3C2000"
+    "/orderby/NORAD_CAT_ID%20desc"
+    "/format/json"
+    "/limit/8000"
+)
+
+# Historical TLE for a batch of NORAD IDs over the last 180 days
 # Single bulk query: LEO + last 180 days + on-orbit only
 SPACETRACK_HISTORY_URL = (
     "https://www.space-track.org/basicspacedata/query"
@@ -136,6 +150,8 @@ def to_dataframe(records: list[dict]) -> pd.DataFrame:
     for col in ["EPOCH", "CREATION_DATE", "LAUNCH_DATE"]:
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors="coerce", utc=True)
+            # Databricks only supports microsecond precision — cast down from nanoseconds
+            df[col] = df[col].astype("datetime64[us, UTC]")
 
     df["NORAD_CAT_ID"] = df["NORAD_CAT_ID"].astype(str)
     df = df.drop_duplicates(subset=["NORAD_CAT_ID", "EPOCH"])
@@ -150,9 +166,16 @@ def run_sql(w: WorkspaceClient, statement: str, warehouse_id: str):
     result = w.statement_execution.execute_statement(
         statement=statement,
         warehouse_id=warehouse_id,
-        wait_timeout="50s",
+        wait_timeout="0s",
     )
-    state = result.status.state.value if result.status else "UNKNOWN"
+    statement_id = result.statement_id
+    while True:
+        result = w.statement_execution.get_statement(statement_id)
+        state = result.status.state.value if result.status else "UNKNOWN"
+        if state in ("SUCCEEDED", "FAILED", "CANCELED", "CLOSED"):
+            break
+        log.info(f"  SQL state: {state} — waiting...")
+        time.sleep(5)
     if state != "SUCCEEDED":
         error = result.status.error if result.status else None
         raise RuntimeError(f"SQL failed [{state}]: {error}")
@@ -177,6 +200,12 @@ def existing_row_count(w: WorkspaceClient, warehouse_id: str) -> int:
 
 def upload_and_register(df: pd.DataFrame, w: WorkspaceClient, warehouse_id: str) -> None:
     file_path = f"{VOLUME_PATH}/tle_history.parquet"
+
+    # Cast timestamps to microseconds — Databricks rejects nanosecond precision
+    datetime_cols = ["EPOCH", "CREATION_DATE", "LAUNCH_DATE"]
+    for col in datetime_cols:
+        if col in df.columns:
+            df[col] = df[col].astype("datetime64[us, UTC]")
 
     buf = io.BytesIO()
     df.to_parquet(buf, index=False, engine="pyarrow")
