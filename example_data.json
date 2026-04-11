@@ -1,0 +1,385 @@
+{
+  "_meta": {
+    "generated_at": "2026-04-11T17:16:12.565156+00:00Z",
+    "target_object": "ISS (International Space Station)",
+    "norad_id": 25544,
+    "cospar_id": "1998-067A",
+    "description": "One live record from each Drift Zero data source. Field names, types, and values are exactly what the pipeline will receive. See test_apis.py schema tables for per-field documentation."
+  },
+  "source_1_spacetrack_live_tle": {
+    "_doc": "Latest TLE for the target satellite. Refresh every 4\u20138 hours. JOIN KEY: NORAD_CAT_ID",
+    "_endpoint": "https://www.space-track.org/basicspacedata/query/class/gp/NORAD_CAT_ID/25544/format/json/limit/1",
+    "record": {
+      "CCSDS_OMM_VERS": "3.0",
+      "COMMENT": "GENERATED VIA SPACE-TRACK.ORG API",
+      "CREATION_DATE": "2026-04-11T15:36:26",
+      "ORIGINATOR": "18 SPCS",
+      "OBJECT_NAME": "ISS (ZARYA)",
+      "OBJECT_ID": "1998-067A",
+      "CENTER_NAME": "EARTH",
+      "REF_FRAME": "TEME",
+      "TIME_SYSTEM": "UTC",
+      "MEAN_ELEMENT_THEORY": "SGP4",
+      "EPOCH": "2026-04-11T11:44:40.701408",
+      "MEAN_MOTION": "15.48873216",
+      "ECCENTRICITY": "0.00064320",
+      "INCLINATION": "51.6326",
+      "RA_OF_ASC_NODE": "270.1822",
+      "ARG_OF_PERICENTER": "299.5706",
+      "MEAN_ANOMALY": "60.4641",
+      "EPHEMERIS_TYPE": "0",
+      "CLASSIFICATION_TYPE": "U",
+      "NORAD_CAT_ID": "25544",
+      "ELEMENT_SET_NO": "999",
+      "REV_AT_EPOCH": "56141",
+      "BSTAR": "0.00011816000000",
+      "MEAN_MOTION_DOT": "0.00006038",
+      "MEAN_MOTION_DDOT": "0.0000000000000",
+      "SEMIMAJOR_AXIS": "6798.158",
+      "PERIOD": "92.971",
+      "APOAPSIS": "424.396",
+      "PERIAPSIS": "415.651",
+      "OBJECT_TYPE": "PAYLOAD",
+      "RCS_SIZE": "LARGE",
+      "COUNTRY_CODE": "CIS",
+      "LAUNCH_DATE": "1998-11-20",
+      "SITE": "TTMTR",
+      "DECAY_DATE": null,
+      "FILE": "5126412",
+      "GP_ID": "319129555",
+      "TLE_LINE0": "0 ISS (ZARYA)",
+      "TLE_LINE1": "1 25544U 98067A   26101.48935997  .00006038  00000-0  11816-3 0  9991",
+      "TLE_LINE2": "2 25544  51.6326 270.1822 0006432 299.5706  60.4641 15.48873216561413"
+    }
+  },
+  "source_2_spacetrack_cdm": {
+    "_doc": "Conjunction Data Messages where the target is SAT_1. JOIN KEYS: SAT_1_ID, SAT_2_ID \u2192 NORAD_CAT_ID",
+    "_endpoint": "https://www.space-track.org/basicspacedata/query/class/cdm_public/SAT_1_ID/25544/TCA/>now/format/json/orderby/TCA asc/limit/3",
+    "records": [],
+    "_note": "Empty list means no active conjunctions right now \u2014 this is normal. In production poll frequently and store all events."
+  },
+  "source_3_spacetrack_historical_tle": {
+    "_doc": "Historical TLE time-series \u2014 same schema as source_1. Used by Rogue for pattern-of-life baseline.",
+    "_endpoint": "https://www.space-track.org/basicspacedata/query/class/gp_history/NORAD_CAT_ID/25544/EPOCH/YYYY-MM-DD--YYYY-MM-DD/orderby/EPOCH asc/format/json",
+    "total_records_last_30_days": 120,
+    "sample_records": [
+      {
+        "CCSDS_OMM_VERS": "3.0",
+        "COMMENT": "GENERATED VIA SPACE-TRACK.ORG API",
+        "CREATION_DATE": "2026-03-12T07:46:21",
+        "ORIGINATOR": "18 SPCS",
+        "OBJECT_NAME": "ISS (ZARYA)",
+        "OBJECT_ID": "1998-067A",
+        "CENTER_NAME": "EARTH",
+        "REF_FRAME": "TEME",
+        "TIME_SYSTEM": "UTC",
+        "MEAN_ELEMENT_THEORY": "SGP4",
+        "EPOCH": "2026-03-12T03:49:12.416736",
+        "MEAN_MOTION": "15.48595269",
+        "ECCENTRICITY": "0.00079840",
+        "INCLINATION": "51.6325",
+        "RA_OF_ASC_NODE": "60.1463",
+        "ARG_OF_PERICENTER": "183.4136",
+        "MEAN_ANOMALY": "176.6799",
+        "EPHEMERIS_TYPE": "0",
+        "CLASSIFICATION_TYPE": "U",
+        "NORAD_CAT_ID": "25544",
+        "ELEMENT_SET_NO": "999",
+        "REV_AT_EPOCH": "55671",
+        "BSTAR": "0.00017667000000",
+        "MEAN_MOTION_DOT": "0.00009166",
+        "MEAN_MOTION_DDOT": "0.0000000000000",
+        "SEMIMAJOR_AXIS": "6798.972",
+        "PERIOD": "92.987",
+        "APOAPSIS": "426.265",
+        "PERIAPSIS": "415.408",
+        "OBJECT_TYPE": "PAYLOAD",
+        "RCS_SIZE": "LARGE",
+        "COUNTRY_CODE": "CIS",
+        "LAUNCH_DATE": "1998-11-20",
+        "SITE": "TTMTR",
+        "DECAY_DATE": null,
+        "FILE": "5084753",
+        "GP_ID": "315693866",
+        "TLE_LINE0": "0 ISS (ZARYA)",
+        "TLE_LINE1": "1 25544U 98067A   26071.15917149  .00009166  00000-0  17667-3 0  9995",
+        "TLE_LINE2": "2 25544  51.6325  60.1463 0007984 183.4136 176.6799 15.48595269556711"
+      },
+      {
+        "CCSDS_OMM_VERS": "3.0",
+        "COMMENT": "GENERATED VIA SPACE-TRACK.ORG API",
+        "CREATION_DATE": "2026-03-23T10:28:44",
+        "ORIGINATOR": "18 SPCS",
+        "OBJECT_NAME": "ISS (ZARYA)",
+        "OBJECT_ID": "1998-067A",
+        "CENTER_NAME": "EARTH",
+        "REF_FRAME": "TEME",
+        "TIME_SYSTEM": "UTC",
+        "MEAN_ELEMENT_THEORY": "SGP4",
+        "EPOCH": "2026-03-23T04:41:36.951648",
+        "MEAN_MOTION": "15.48483260",
+        "ECCENTRICITY": "0.00061926",
+        "INCLINATION": "51.6344",
+        "RA_OF_ASC_NODE": "5.5946",
+        "ARG_OF_PERICENTER": "222.9473",
+        "MEAN_ANOMALY": "137.1033",
+        "EPHEMERIS_TYPE": "0",
+        "CLASSIFICATION_TYPE": "U",
+        "NORAD_CAT_ID": "25544",
+        "ELEMENT_SET_NO": "999",
+        "REV_AT_EPOCH": "55842",
+        "BSTAR": "0.00032963634000",
+        "MEAN_MOTION_DOT": "0.00017435",
+        "MEAN_MOTION_DDOT": "0.0000000000000",
+        "SEMIMAJOR_AXIS": "6799.299",
+        "PERIOD": "92.994",
+        "APOAPSIS": "425.375",
+        "PERIAPSIS": "416.954",
+        "OBJECT_TYPE": "PAYLOAD",
+        "RCS_SIZE": "LARGE",
+        "COUNTRY_CODE": "CIS",
+        "LAUNCH_DATE": "1998-11-20",
+        "SITE": "TTMTR",
+        "DECAY_DATE": null,
+        "FILE": "5094928",
+        "GP_ID": "316838169",
+        "TLE_LINE0": "0 ISS (ZARYA)",
+        "TLE_LINE1": "1 25544U 98067A   26082.19556657  .00017435  00000-0  32964-3 0  9999",
+        "TLE_LINE2": "2 25544  51.6344   5.5946 0006193 222.9473 137.1033 15.48483260558425"
+      },
+      {
+        "CCSDS_OMM_VERS": "3.0",
+        "COMMENT": "GENERATED VIA SPACE-TRACK.ORG API",
+        "CREATION_DATE": "2026-04-02T07:46:37",
+        "ORIGINATOR": "18 SPCS",
+        "OBJECT_NAME": "ISS (ZARYA)",
+        "OBJECT_ID": "1998-067A",
+        "CENTER_NAME": "EARTH",
+        "REF_FRAME": "TEME",
+        "TIME_SYSTEM": "UTC",
+        "MEAN_ELEMENT_THEORY": "SGP4",
+        "EPOCH": "2026-04-01T21:00:31.002048",
+        "MEAN_MOTION": "15.48704825",
+        "ECCENTRICITY": "0.00062360",
+        "INCLINATION": "51.6331",
+        "RA_OF_ASC_NODE": "317.7347",
+        "ARG_OF_PERICENTER": "261.1612",
+        "MEAN_ANOMALY": "98.8670",
+        "EPHEMERIS_TYPE": "0",
+        "CLASSIFICATION_TYPE": "U",
+        "NORAD_CAT_ID": "25544",
+        "ELEMENT_SET_NO": "999",
+        "REV_AT_EPOCH": "55992",
+        "BSTAR": "0.00016573000000",
+        "MEAN_MOTION_DOT": "0.00008601",
+        "MEAN_MOTION_DDOT": "0.0000000000000",
+        "SEMIMAJOR_AXIS": "6798.651",
+        "PERIOD": "92.981",
+        "APOAPSIS": "424.756",
+        "PERIAPSIS": "416.276",
+        "OBJECT_TYPE": "PAYLOAD",
+        "RCS_SIZE": "LARGE",
+        "COUNTRY_CODE": "CIS",
+        "LAUNCH_DATE": "1998-11-20",
+        "SITE": "TTMTR",
+        "DECAY_DATE": null,
+        "FILE": "5113223",
+        "GP_ID": "317977799",
+        "TLE_LINE0": "0 ISS (ZARYA)",
+        "TLE_LINE1": "1 25544U 98067A   26091.87535882  .00008601  00000-0  16573-3 0  9994",
+        "TLE_LINE2": "2 25544  51.6331 317.7347 0006236 261.1612  98.8670 15.48704825559921"
+      }
+    ],
+    "_pipeline_note": "Store full 180-day history per satellite. Detect maneuvers by computing |delta(MEAN_MOTION)| between consecutive rows."
+  },
+  "source_4_esa_discos": {
+    "_doc": "Physical catalog. JOIN KEY: satno \u2192 NORAD_CAT_ID. Provides mass for fuel equation, xSectAvg for collision probability.",
+    "_endpoint": "https://discosweb.esoc.esa.int/api/objects?filter=eq(cosparId,'1998-067A')",
+    "_auth": "Authorization: Bearer <token>  +  DiscosWeb-Api-Version: 2",
+    "attributes": {
+      "cosparId": "1998-067A",
+      "vimpelId": null,
+      "satno": 25544,
+      "name": "International Space Station",
+      "objectClass": "Payload",
+      "mass": 450000.0,
+      "shape": "Irr",
+      "width": 72.8,
+      "height": 20.0,
+      "depth": 108.5,
+      "diameter": null,
+      "span": 108.5,
+      "xSectMax": 8319.848402465035,
+      "xSectMin": 1456.0,
+      "xSectAvg": 5762.4,
+      "firstEpoch": "1998-12-07",
+      "mission": "Civil Spaceship",
+      "predDecayDate": "2026-05-12",
+      "active": null,
+      "cataloguedFragments": 0,
+      "onOrbitCataloguedFragments": 0
+    },
+    "full_raw_response": {
+      "data": [
+        {
+          "type": "object",
+          "id": "44371",
+          "attributes": {
+            "cosparId": "1998-067A",
+            "vimpelId": null,
+            "satno": 25544,
+            "name": "International Space Station",
+            "objectClass": "Payload",
+            "mass": 450000.0,
+            "shape": "Irr",
+            "width": 72.8,
+            "height": 20.0,
+            "depth": 108.5,
+            "diameter": null,
+            "span": 108.5,
+            "xSectMax": 8319.848402465035,
+            "xSectMin": 1456.0,
+            "xSectAvg": 5762.4,
+            "firstEpoch": "1998-12-07",
+            "mission": "Civil Spaceship",
+            "predDecayDate": "2026-05-12",
+            "active": null,
+            "cataloguedFragments": 0,
+            "onOrbitCataloguedFragments": 0
+          },
+          "relationships": {
+            "launch": {
+              "links": {
+                "self": "/api/objects/44371/relationships/launch",
+                "related": "/api/objects/44371/launch"
+              }
+            },
+            "reentry": {
+              "links": {
+                "self": "/api/objects/44371/relationships/reentry",
+                "related": "/api/objects/44371/reentry"
+              }
+            },
+            "initialOrbits": {
+              "links": {
+                "self": "/api/objects/44371/relationships/initial-orbits",
+                "related": "/api/objects/44371/initial-orbits"
+              }
+            },
+            "destinationOrbits": {
+              "links": {
+                "self": "/api/objects/44371/relationships/destination-orbits",
+                "related": "/api/objects/44371/destination-orbits"
+              }
+            },
+            "states": {
+              "links": {
+                "self": "/api/objects/44371/relationships/states",
+                "related": "/api/objects/44371/states"
+              }
+            },
+            "operators": {
+              "links": {
+                "self": "/api/objects/44371/relationships/operators",
+                "related": "/api/objects/44371/operators"
+              }
+            },
+            "tags": {
+              "links": {
+                "self": "/api/objects/44371/relationships/tags",
+                "related": "/api/objects/44371/tags"
+              }
+            },
+            "constellations": {
+              "links": {
+                "self": "/api/objects/44371/relationships/constellations",
+                "related": "/api/objects/44371/constellations"
+              }
+            }
+          },
+          "links": {
+            "self": "/api/objects/44371"
+          }
+        }
+      ],
+      "links": {
+        "self": "/api/objects?filter=eq(cosparId,'1998-067A')"
+      }
+    }
+  },
+  "source_5_noaa_swpc": {
+    "_doc": "Solar weather for atmospheric drag correction. No auth required.",
+    "kp_index": {
+      "_doc": "Current geomagnetic activity. >5 = flag TLE conjunctions as low-confidence.",
+      "_endpoint": "https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json",
+      "parsed": {
+        "time_tag": "2026-04-04T00:00:00",
+        "kp": 4.67,
+        "quality": "observed"
+      },
+      "raw_sample": [
+        {
+          "time_tag": "2026-04-04T00:00:00",
+          "kp": 4.67,
+          "observed": "observed",
+          "noaa_scale": "G1"
+        },
+        {
+          "time_tag": "2026-04-04T03:00:00",
+          "kp": 3.67,
+          "observed": "observed",
+          "noaa_scale": null
+        },
+        {
+          "time_tag": "2026-04-04T06:00:00",
+          "kp": 2.67,
+          "observed": "observed",
+          "noaa_scale": null
+        }
+      ]
+    },
+    "f107_solar_flux": {
+      "_doc": "Monthly solar flux. Input to atmospheric density model (NRLMSISE-00).",
+      "_endpoint": "https://services.swpc.noaa.gov/json/solar-cycle/observed-solar-cycle-indices.json",
+      "latest_record": {
+        "time-tag": "2026-03",
+        "ssn": 85.9,
+        "smoothed_ssn": -1.0,
+        "observed_swpc_ssn": 89.87,
+        "smoothed_swpc_ssn": -1.0,
+        "f10.7": 130.66,
+        "smoothed_f10.7": -1.0
+      }
+    },
+    "solar_wind": {
+      "_doc": "Real-time solar wind from DSCOVR satellite at L1. Elevated speed = Kp storm coming in 1\u20133 days.",
+      "_endpoint": "https://services.swpc.noaa.gov/products/solar-wind/plasma-7-day.json",
+      "latest_record": {
+        "time_tag": "2026-04-11 17:13:00.000",
+        "density": "1.50",
+        "speed": "574.9",
+        "temperature": "122218"
+      },
+      "raw_sample": [
+        [
+          "2026-04-11 17:11:00.000",
+          "2.72",
+          "584.4",
+          "127609"
+        ],
+        [
+          "2026-04-11 17:12:00.000",
+          "2.99",
+          "588.7",
+          "136844"
+        ],
+        [
+          "2026-04-11 17:13:00.000",
+          "1.50",
+          "574.9",
+          "122218"
+        ]
+      ]
+    }
+  }
+}
