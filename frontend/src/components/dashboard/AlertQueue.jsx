@@ -14,11 +14,6 @@ const SEVERITY_BG = {
   LOW: 'rgba(148, 163, 184, 0.05)',
 }
 
-function formatProb(p) {
-  if (p >= 0.001) return `1:${Math.round(1 / p).toLocaleString()}`
-  if (p >= 0.0001) return `1:${Math.round(1 / p).toLocaleString()}`
-  return `1:${Math.round(1 / p).toLocaleString()}`
-}
 
 export default function AlertQueue({ selected, onSelect }) {
   return (
@@ -96,23 +91,13 @@ export default function AlertQueue({ selected, onSelect }) {
                 {c.secondarySatName}
               </div>
 
-              {/* Bottom row — metrics */}
+              {/* Bottom row — miss distance */}
               <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
                 <span style={{ fontSize: 10, color: '#64748b' }}>
-                  P = <span style={{ color, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                    {formatProb(c.probability)}
-                  </span>
-                </span>
-                <span style={{ fontSize: 10, color: '#64748b' }}>
-                  Δ = <span style={{ color: '#94a3b8', fontVariantNumeric: 'tabular-nums' }}>
+                  Miss distance: <span style={{ color: '#94a3b8', fontVariantNumeric: 'tabular-nums' }}>
                     {c.missDistanceKm < 1
                       ? `${(c.missDistanceKm * 1000).toFixed(0)} m`
                       : `${c.missDistanceKm.toFixed(2)} km`}
-                  </span>
-                </span>
-                <span style={{ fontSize: 10, color: '#64748b' }}>
-                  v = <span style={{ color: '#94a3b8', fontVariantNumeric: 'tabular-nums' }}>
-                    {c.relativeVelocityKms} km/s
                   </span>
                 </span>
               </div>
