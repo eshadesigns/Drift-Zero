@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "cesium/Build/Cesium/Widgets/widgets.css";
 
 *, *::before, *::after {
   box-sizing: border-box;

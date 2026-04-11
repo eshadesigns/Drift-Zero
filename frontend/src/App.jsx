@@ -1,6 +1,4 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-// GlobeView lives on Kushagra's branch — placeholder here for dev
-const GlobeView = () => <div className="w-full h-full bg-gray-900 flex items-center justify-center text-gray-600 text-sm">Globe (Kushagra)</div>
 import StatsBar from './components/dashboard/StatsBar'
 import AlertQueue from './components/dashboard/AlertQueue'
 import ManeuverPanel from './components/dashboard/ManeuverPanel'
@@ -14,11 +12,10 @@ const DEFAULT_SPLIT = 70
 export default function App() {
   const [selectedConjunction, setSelectedConjunction] = useState(null)
   const [splitPct, setSplitPct] = useState(DEFAULT_SPLIT)
-  const [collapsed, setCollapsed] = useState(null) // 'globe' | 'panels' | null
+  const [collapsed, setCollapsed] = useState(null)
   const [isDragging, setIsDragging] = useState(false)
   const containerRef = useRef(null)
 
-  // ── Drag logic ───────────────────────────────────────────────────────────────
   const onDividerMouseDown = useCallback((e) => {
     e.preventDefault()
     setIsDragging(true)
@@ -27,16 +24,13 @@ export default function App() {
 
   useEffect(() => {
     if (!isDragging) return
-
     const onMouseMove = (e) => {
       if (!containerRef.current) return
       const { left, width } = containerRef.current.getBoundingClientRect()
       const pct = ((e.clientX - left) / width) * 100
       setSplitPct(Math.min(GLOBE_MAX, Math.max(GLOBE_MIN, pct)))
     }
-
     const onMouseUp = () => setIsDragging(false)
-
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)
     return () => {
@@ -45,7 +39,6 @@ export default function App() {
     }
   }, [isDragging])
 
-  // ── Collapse logic ───────────────────────────────────────────────────────────
   const collapseGlobe = () => {
     if (collapsed === 'globe') { setCollapsed(null); setSplitPct(DEFAULT_SPLIT) }
     else setCollapsed('globe')
@@ -73,54 +66,43 @@ export default function App() {
 
       <div ref={containerRef} className="flex flex-1 overflow-hidden relative">
 
-        {/* ── Globe pane — Kushagra's zone ── */}
-        <div style={{ width: globeWidth, transition }} className="h-full overflow-hidden shrink-0">
-          <GlobeView />
+        {/* Globe placeholder — Kushagra connects GlobeView here */}
+        <div style={{ width: globeWidth, transition }}
+          className="h-full overflow-hidden shrink-0 bg-gray-900 flex items-center justify-center">
+          <span className="text-gray-600 text-sm">Globe</span>
         </div>
 
-        {/* ── Resizable divider ── */}
+        {/* Resizable divider */}
         {!collapsed && (
           <div
             onMouseDown={onDividerMouseDown}
             className="relative z-10 flex flex-col items-center justify-center w-[6px] shrink-0 bg-gray-800 hover:bg-blue-500 cursor-col-resize transition-colors group"
           >
-            <button
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={collapsePanels}
-              className="absolute top-[40%] -translate-y-full mb-1 w-5 h-5 rounded-sm bg-gray-700 hover:bg-blue-600 text-gray-300 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Expand globe"
+            <button onMouseDown={(e) => e.stopPropagation()} onClick={collapsePanels}
+              className="absolute top-[40%] -translate-y-full w-5 h-5 rounded-sm bg-gray-700 hover:bg-blue-600 text-gray-300 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
             >›</button>
-            <button
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={collapseGlobe}
-              className="absolute top-[40%] translate-y-full mt-1 w-5 h-5 rounded-sm bg-gray-700 hover:bg-blue-600 text-gray-300 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Expand panels"
+            <button onMouseDown={(e) => e.stopPropagation()} onClick={collapseGlobe}
+              className="absolute top-[40%] translate-y-full w-5 h-5 rounded-sm bg-gray-700 hover:bg-blue-600 text-gray-300 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
             >‹</button>
           </div>
         )}
 
-        {/* Restore button when collapsed */}
         {collapsed && (
           <button
             onClick={() => { setCollapsed(null); setSplitPct(DEFAULT_SPLIT) }}
             className={`absolute top-1/2 -translate-y-1/2 z-20 w-6 h-12 rounded bg-gray-700 hover:bg-blue-600 text-gray-300 text-xs flex items-center justify-center transition-colors ${
               collapsed === 'globe' ? 'left-2' : 'right-2'
             }`}
-            title="Restore split"
           >
             {collapsed === 'globe' ? '›' : '‹'}
           </button>
         )}
 
-        {/* ── Dashboard panels ── */}
-        <div
-          style={{ width: panelWidth, transition }}
+        {/* Dashboard panels */}
+        <div style={{ width: panelWidth, transition }}
           className="h-full flex flex-col border-l border-gray-800 overflow-y-auto overflow-x-hidden shrink-0"
         >
-          <AlertQueue
-            selected={selectedConjunction}
-            onSelect={setSelectedConjunction}
-          />
+          <AlertQueue selected={selectedConjunction} onSelect={setSelectedConjunction} />
           {selectedConjunction && (
             <>
               <NaturalLanguageAlert conjunction={selectedConjunction} />
