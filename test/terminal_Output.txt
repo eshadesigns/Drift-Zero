@@ -1,0 +1,580 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  DRIFT ZERO — API Data Source Explorer
+  Target: ISS  │  NORAD 25544  │  COSPAR 1998-067A
+  Output: example_data.json
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Authenticating with Space-Track...
+  Auth OK
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SOURCE 1  │  Space-Track.org — Live TLE
+  ────────────────────────────────────────────────────────────────────
+  Two-Line Element sets: the orbital state of a satellite right now.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  WHAT IS A TLE?
+  A Two-Line Element set is a standardized snapshot of a satellite's orbit.      
+  Feed it into the sgp4 library to get X/Y/Z position (km) at any timestamp.     
+  Space-Track updates TLEs every few hours for active objects.
+
+  JOIN KEY:  NORAD_CAT_ID  →  links to ESA DISCOS via satno field
+  PARTITION: EPOCH         →  use as the Databricks Delta Lake partition key     
+  UPDATE FREQ: ~4–8 hrs for active LEO satellites
+
+
+  ┌─ SCHEMA — fields the pipeline ingests from each TLE record ─────────┐        
+  │ ────────────────────────────────────────────────────────────────────
+  │ FIELD                      TYPE       PIPELINE ROLE        NOTES
+  │ ────────────────────────────────────────────────────────────────────
+  │ NORAD_CAT_ID               str        JOIN KEY             Primary
+  │                                                            key
+  │                                                            across
+  │                                                            all space
+  │                                                            databases.        
+  │                                                            Use to
+  │                                                            join with
+  │                                                            DISCOS.
+  │ OBJECT_NAME                str        label / display
+  │                                                            Human-readable    
+  │                                                            name. Use
+  │                                                            for UI
+  │                                                            only —
+  │                                                            not
+  │                                                            stable
+  │                                                            enough
+  │                                                            for
+  │                                                            joins.
+  │ EPOCH                      datetime   partition key        When this
+  │                                                            TLE was
+  │                                                            measured.
+  │                                                            Older
+  │                                                            epoch =
+  │                                                            less
+  │                                                            accurate
+  │                                                            propagated        
+  │                                                            position.
+  │ MEAN_MOTION                float      maneuver detection
+  │                                                            Orbits/day.       
+  │                                                            Sudden
+  │                                                            delta
+  │                                                            between
+  │                                                            epochs =
+  │                                                            thruster
+  │                                                            firing
+  │                                                            (Rogue
+  │                                                            signal).
+  │ ECCENTRICITY               float      orbit classifier     0 =
+  │                                                            circular,
+  │                                                            1 =
+  │                                                            parabolic.        
+  │                                                            Most LEO
+  │                                                            ops sats
+  │                                                            are <
+  │                                                            0.01.
+  │ INCLINATION                float      orbit classifier     Degrees
+  │                                                            from
+  │                                                            equator.
+  │                                                            Determines        
+  │                                                            ground
+  │                                                            track and
+  │                                                            coverage
+  │                                                            zone.
+  │ RA_OF_ASC_NODE             float      propagation input    Orbital
+  │                                                            plane
+  │                                                            orientation.      
+  │                                                            Drifts
+  │                                                            predictably       
+  │                                                            — key
+  │                                                            input to
+  │                                                            sgp4.
+  │ ARG_OF_PERICENTER          float      propagation input    Ellipse
+  │                                                            orientation       
+  │                                                            within
+  │                                                            plane.
+  │                                                            Matters
+  │                                                            for
+  │                                                            eccentric
+  │                                                            orbits.
+  │ MEAN_ANOMALY               float      propagation input    Position
+  │                                                            within
+  │                                                            orbit at
+  │                                                            epoch.
+  │                                                            Combined
+  │                                                            with
+  │                                                            MEAN_MOTION       
+  │                                                            →
+  │                                                            position.
+  │ BSTAR                      float      drag correction      Drag
+  │                                                            coefficient.      
+  │                                                            NOAA
+  │                                                            Kp/F10.7
+  │                                                            corrects
+  │                                                            this for
+  │                                                            current
+  │                                                            solar
+  │                                                            activity.
+  │ OBJECT_TYPE                str        filter               PAYLOAD /
+  │                                                            DEBRIS /
+  │                                                            ROCKET
+  │                                                            BODY /
+  │                                                            UNKNOWN.
+  │                                                            Rogue
+  │                                                            profiles
+  │                                                            PAYLOAD
+  │                                                            only.
+  │ COUNTRY_CODE               str        geopolitical ctx     Operator
+  │                                                            country.
+  │                                                            Adds
+  │                                                            context
+  │                                                            to Rogue
+  │                                                            intent
+  │                                                            classification.   
+  │ REV_AT_EPOCH               int        age proxy            Total
+  │                                                            revolutions       
+  │                                                            since
+  │                                                            launch.
+  │                                                            Use to
+  │                                                            estimate
+  │                                                            satellite
+  │                                                            age.
+  └──────────────────────────────────────────────────────────────────────        
+
+  ┌─ LIVE VALUES from this request (ISS) ───────────────────────────────┐        
+    OBJECT_NAME                    ISS (ZARYA)
+    NORAD_CAT_ID                   25544
+    EPOCH                          2026-04-11T11:44:40.701408
+    MEAN_MOTION                    15.48873216
+    ECCENTRICITY                   0.00064320
+    INCLINATION                    51.6326
+    BSTAR                          0.00011816000000
+    OBJECT_TYPE                    PAYLOAD
+    COUNTRY_CODE                   CIS
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SOURCE 3  │  Space-Track.org — Historical TLE Archive
+  ────────────────────────────────────────────────────────────────────
+  Same schema as live TLE, queried over a date range. Rogue's baseline input.    
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  WHAT IS THIS FOR?
+  Rogue mode builds a 180-day pattern-of-life baseline per satellite by
+  diffing consecutive TLE epochs. A sudden change in MEAN_MOTION or
+  ECCENTRICITY = the satellite maneuvered. That is the core Rogue signal.        
+
+  SAME SCHEMA as Source 1 — only the query changes:
+    Live TLE:    /class/gp/NORAD_CAT_ID/{id}
+    Historical:  /class/gp_history/NORAD_CAT_ID/{id}/EPOCH/YYYY-MM-DD--YYYY-MM-DD
+
+  Records returned (last 30 days for ISS): 120
+
+
+  ┌─ MANEUVER DETECTION SIGNAL — MEAN_MOTION sampled over 30 days ──────┐        
+  EPOCH                  MEAN_MOTION (rev/day)     BSTAR (drag)
+  ────────────────────── ───────────────────────── ────────────────────
+  2026-03-12T03:49:12    15.48595269               0.00017667000000
+  2026-03-15T06:10:05    15.48289699               0.00018620385000
+  2026-03-18T19:21:54    15.48363739               0.00016833000000
+  2026-03-21T12:25:18    15.48422342               0.00026848155000
+  2026-03-25T20:11:46    15.48540672               0.00022937548000
+  2026-03-28T03:57:10    15.48601072               0.00024003000000
+  2026-03-31T03:11:39    15.48671303               0.00021776695000
+  2026-04-02T20:14:17    15.48729122               0.00022447000000
+  2026-04-05T13:16:46    15.48786980               0.00016420000000
+  2026-04-08T00:07:29    15.48824658               0.00014015075000
+
+  PIPELINE NOTE: store as a time-series table partitioned by NORAD_CAT_ID.       
+  Compute MEAN_MOTION delta row-by-row. Flag rows where |delta| > 0.001 rev/day. 
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SOURCE 2  │  Space-Track.org — Conjunction Data Messages (CDMs)
+  ────────────────────────────────────────────────────────────────────
+  Pre-computed close-approach warnings. Primary input to Shield's alert queue.   
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  WHAT IS A CDM?
+  Space-Track's CARA team computes close approaches for every tracked pair.      
+  A CDM is generated when two objects will come within ~5 km of each other.      
+  Shield consumes CDMs directly — no need to compute conjunctions from scratch.  
+
+  UPDATE FREQ: Multiple times per day. New CDMs appear as orbital states update. 
+  JOIN KEY:    SAT_1_ID / SAT_2_ID  →  NORAD_CAT_ID in TLE table
+
+
+  ┌─ SCHEMA — fields the pipeline ingests from each CDM record ─────────┐        
+  │ ────────────────────────────────────────────────────────────────────
+  │ FIELD                      TYPE       PIPELINE ROLE        NOTES
+  │ ────────────────────────────────────────────────────────────────────
+  │ CDM_ID                     str        primary key          Unique ID
+  │                                                            for this
+  │                                                            conjunction       
+  │                                                            event.   
+  │ SAT_1_NAME                 str        display              Your
+  │                                                            asset.
+  │                                                            Filter
+  │                                                            CDMs
+  │                                                            where
+  │                                                            SAT_1 is
+  │                                                            in your
+  │                                                            constellation.    
+  │ SAT_1_ID                   str        JOIN KEY             NORAD ID
+  │                                                            of your
+  │                                                            asset.
+  │                                                            Join to
+  │                                                            TLE table
+  │                                                            for
+  │                                                            current
+  │                                                            state.
+  │ SAT_2_NAME                 str        display              The
+  │                                                            threat
+  │                                                            object.
+  │ SAT_2_ID                   str        JOIN KEY             NORAD ID
+  │                                                            of the
+  │                                                            threat.
+  │                                                            Join to
+  │                                                            TLE +
+  │                                                            DISCOS
+  │                                                            for full
+  │                                                            profile.
+  │ TCA                        datetime   event timestamp      Time of
+  │                                                            Closest
+  │                                                            Approach
+  │                                                            — when
+  │                                                            they are
+  │                                                            nearest.
+  │                                                            This
+  │                                                            drives
+  │                                                            alert
+  │                                                            timing.
+  │ MISS_DISTANCE              float      risk metric          Closest
+  │                                                            approach
+  │                                                            distance
+  │                                                            in
+  │                                                            meters.
+  │                                                            <1000m =
+  │                                                            worth
+  │                                                            reviewing.        
+  │ COLLISION_PROBABILITY      float      risk metric          Impact
+  │                                                            probability       
+  │                                                            0–1.
+  │                                                            >1e-4 =
+  │                                                            standard
+  │                                                            maneuver
+  │                                                            threshold.        
+  │ RELATIVE_SPEED             float      risk metric          m/s at
+  │                                                            closest
+  │                                                            approach.
+  │                                                            Higher =
+  │                                                            more
+  │                                                            kinetic
+  │                                                            energy if
+  │                                                            impact
+  │                                                            occurs.
+  │ SAT_2_OBJECT_TYPE          str        filter               DEBRIS /
+  │                                                            PAYLOAD /
+  │                                                            ROCKET
+  │                                                            BODY.
+  │                                                            Payload =
+  │                                                            may
+  │                                                            maneuver
+  │                                                            (check
+  │                                                            operator
+  │                                                            profile).
+  │ PC_METHOD                  str        model metadata       Which
+  │                                                            probability       
+  │                                                            model was
+  │                                                            used.
+  │                                                            Affects
+  │                                                            how to
+  │                                                            interpret
+  │                                                            the Pc
+  │                                                            value.
+  └──────────────────────────────────────────────────────────────────────        
+
+  LIVE: No upcoming CDMs for ISS right now (normal — conjunctions are rare).     
+  The pipeline should poll /class/cdm_public/limit/100 on a schedule and store all events.
+
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SOURCE 4  │  ESA DISCOS — Debris & Spacecraft Physical Catalog
+  ────────────────────────────────────────────────────────────────────
+  Physical properties of space objects. Space-Track = WHERE. DISCOS = WHAT.      
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  WHAT IS DISCOS?
+  ESA's Database and Information System Characterising Objects in Space.
+  Provides mass, dimensions, shape, and cross-section for every tracked object.  
+
+  WHY THE PIPELINE NEEDS IT:
+  → mass (kg)      feeds the Tsiolkovsky fuel equation in Shield
+  → xSectAvg (m²) feeds the collision probability model
+  → objectClass   tells Rogue which objects are worth profiling
+
+  JOIN KEY:  satno  →  NORAD_CAT_ID in Space-Track TLE table
+  AUTH:      Bearer token  +  header DiscosWeb-Api-Version: 2  (both required)   
+  BASE URL:  https://discosweb.esoc.esa.int/api
+
+
+  ┌─ SCHEMA — fields the pipeline ingests from each DISCOS object record ┐       
+  │ ────────────────────────────────────────────────────────────────────
+  │ FIELD                      TYPE       PIPELINE ROLE        NOTES
+  │ ────────────────────────────────────────────────────────────────────
+  │ satno                      int        JOIN KEY             NORAD
+  │                                                            catalog
+  │                                                            number.
+  │                                                            Use to
+  │                                                            join with
+  │                                                            Space-Track       
+  │                                                            TLE
+  │                                                            records.
+  │ cosparId                   str        secondary key        COSPAR
+  │                                                            ID.
+  │                                                            Format
+  │                                                            YYYY-NNNX.        
+  │                                                            Cross-reference   
+  │                                                            when
+  │                                                            NORAD IDs
+  │                                                            mismatch.
+  │ name                       str        display only         ESA
+  │                                                            catalog
+  │                                                            name. May
+  │                                                            differ
+  │                                                            from
+  │                                                            Space-Track       
+  │                                                            name —
+  │                                                            use IDs
+  │                                                            for
+  │                                                            joins.
+  │ objectClass                str        filter               Payload /
+  │                                                            Debris /
+  │                                                            Rocket
+  │                                                            Body /
+  │                                                            Unknown.
+  │                                                            Rogue
+  │                                                            profiles
+  │                                                            Payload
+  │                                                            only.
+  │ mass                       float      fuel equation        Dry mass
+  │                                                            in kg.
+  │                                                            Required
+  │                                                            input to
+  │                                                            Tsiolkovsky:      
+  │                                                            Δm = m*(1
+  │                                                            -
+  │                                                            e^(-Δv/ve)).      
+  │ xSectAvg                   float      collision prob       Average
+  │                                                            radar
+  │                                                            cross-section     
+  │                                                            m².
+  │                                                            Larger =
+  │                                                            higher
+  │                                                            effective
+  │                                                            collision
+  │                                                            area.
+  │ xSectMax                   float      collision prob       Max
+  │                                                            cross-section     
+  │                                                            (broadside).      
+  │                                                            Use for
+  │                                                            worst-case        
+  │                                                            Pc bound.
+  │ depth                      float      physical model       Depth
+  │                                                            dimension
+  │                                                            in
+  │                                                            meters.
+  │ height                     float      physical model       Height
+  │                                                            dimension
+  │                                                            in
+  │                                                            meters.
+  │ span                       float      physical model       Span
+  │                                                            (width)
+  │                                                            in
+  │                                                            meters.
+  │ shape                      str        physical model
+  │                                                            Geometry:
+  │                                                            Box+Appendages,   
+  │                                                            Cylinder,
+  │                                                            Sphere,
+  │                                                            etc.
+  │                                                            Affects
+  │                                                            tumble/drag.      
+  └──────────────────────────────────────────────────────────────────────        
+
+  ┌─ LIVE VALUES from this request (ISS) ───────────────────────────────┐        
+    satno                          25544
+    cosparId                       1998-067A
+    name                           International Space Station
+    objectClass                    Payload
+    mass                           450000.0
+    xSectAvg                       5762.4
+    xSectMax                       8319.848402465035
+    depth                          108.5
+    height                         20.0
+    span                           108.5
+    shape                          Irr
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SOURCE 5  │  NOAA SWPC — Solar Weather & Atmospheric Drag
+  ────────────────────────────────────────────────────────────────────
+  No API key required. Live solar activity data for drag correction in Shield.   
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  WHAT IS THIS FOR?
+  Solar activity heats the upper atmosphere, causing it to expand.
+  This increases drag on LEO satellites — their actual orbit decays faster       
+  than the TLE's BSTAR term predicts. Shield uses NOAA data to:
+    1. Correct the drag coefficient for current solar conditions
+    2. Flag conjunctions computed during high-Kp periods as lower confidence     
+
+  THREE FEEDS (all free JSON endpoints, no auth):
+    Kp index      →  geomagnetic storm level right now
+    F10.7 flux    →  solar activity index used in atmospheric density models     
+    Solar wind    →  upstream conditions arriving from DSCOVR at L1
+
+
+  ┌─ SCHEMA — Kp Index  (noaa-planetary-k-index-forecast.json) ─────────┐        
+  │ ────────────────────────────────────────────────────────────────────
+  │ FIELD                      TYPE       PIPELINE ROLE        NOTES
+  │ ────────────────────────────────────────────────────────────────────
+  │ time_tag                   datetime   timestamp            When this
+  │                                                            Kp
+  │                                                            reading
+  │                                                            was
+  │                                                            taken.
+  │ kp                         float      drag correction      0–9
+  │                                                            scale. >5
+  │                                                            =
+  │                                                            geomagnetic       
+  │                                                            storm.
+  │                                                            Flag
+  │                                                            TLE-based
+  │                                                            conjunctions      
+  │                                                            as
+  │                                                            low-confidence.   
+  │ quality                    str        data quality         observed
+  │                                                            /
+  │                                                            estimated
+  │                                                            /
+  │                                                            predicted.        
+  │                                                            Use
+  │                                                            observed
+  │                                                            for
+  │                                                            corrections,      
+  │                                                            predicted
+  │                                                            for
+  │                                                            scheduling.       
+  └──────────────────────────────────────────────────────────────────────        
+
+  ┌─ LIVE VALUES ───────────────────────────────────────────────────────┐        
+    time_tag                       2026-04-04T00:00:00
+    kp                             4.67
+    quality                        observed
+
+
+  ┌─ SCHEMA — F10.7 Solar Flux  (observed-solar-cycle-indices.json) ────┐        
+  │ ────────────────────────────────────────────────────────────────────
+  │ FIELD                      TYPE       PIPELINE ROLE        NOTES
+  │ ────────────────────────────────────────────────────────────────────
+  │ time-tag                   str        timestamp            Month of
+  │                                                            observation       
+  │                                                            (monthly
+  │                                                            averages).        
+  │ f10.7                      float      drag model input     Solar
+  │                                                            flux
+  │                                                            units.
+  │                                                            Baseline
+  │                                                            ~70,
+  │                                                            solar max
+  │                                                            >200.
+  │                                                            Input to
+  │                                                            NRLMSISE-00       
+  │                                                            density
+  │                                                            model.
+  │ smoothed_f10.7             float      trend                81-day
+  │                                                            average.
+  │                                                            Use for
+  │                                                            long-term
+  │                                                            drag
+  │                                                            trend in
+  │                                                            pattern-of-life   
+  │                                                            modeling.
+  │ ssn                        float      solar activity       Sunspot
+  │                                                            number. 0
+  │                                                            = solar
+  │                                                            minimum,
+  │                                                            200+ =
+  │                                                            solar
+  │                                                            maximum.
+  │                                                            Correlated        
+  │                                                            with
+  │                                                            F10.7.
+  └──────────────────────────────────────────────────────────────────────        
+
+  ┌─ LIVE VALUES ───────────────────────────────────────────────────────┐        
+    time-tag                       2026-03
+    ssn                            85.9
+    smoothed_ssn                   -1.0
+    observed_swpc_ssn              89.87
+    smoothed_swpc_ssn              -1.0
+    f10.7                          130.66
+    smoothed_f10.7                 -1.0
+
+
+  ┌─ SCHEMA — Solar Wind Plasma  (solar-wind/plasma-7-day.json) ────────┐        
+  │ ────────────────────────────────────────────────────────────────────
+  │ FIELD                      TYPE       PIPELINE ROLE        NOTES
+  │ ────────────────────────────────────────────────────────────────────
+  │ time_tag                   datetime   timestamp            UTC
+  │                                                            timestamp
+  │                                                            of this
+  │                                                            solar
+  │                                                            wind
+  │                                                            reading.
+  │ density                    float      early warning
+  │                                                            Protons/cm³.      
+  │                                                            High
+  │                                                            density →
+  │                                                            elevated
+  │                                                            Kp
+  │                                                            incoming
+  │                                                            in hours.
+  │ speed                      float      early warning        km/s.
+  │                                                            Fast
+  │                                                            stream
+  │                                                            >600 km/s
+  │                                                            from
+  │                                                            coronal
+  │                                                            hole → Kp
+  │                                                            storm in
+  │                                                            1–3 days.
+  │ temperature                float      wind type            Kelvin.
+  │                                                            Used to
+  │                                                            classify
+  │                                                            wind type
+  │                                                            (slow/fast
+  │                                                            stream vs
+  │                                                            CME).
+  └──────────────────────────────────────────────────────────────────────
+
+  ┌─ LIVE VALUES ───────────────────────────────────────────────────────┐
+    time_tag                       2026-04-11 17:13:00.000
+    density                        1.50
+    speed                          574.9
+    temperature                    122218
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SAVING example_data.json
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Saved → C:\Users\taher\Classes\DriftZero\example_data.json
+  Size  → 13.8 KB
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  DONE
+  → example_data.json  contains one live record from every source
+  → test_apis.py schema tables document every field in the pipeline
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
