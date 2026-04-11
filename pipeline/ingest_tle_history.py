@@ -1,11 +1,15 @@
 """
 ingest_tle_history.py
 
-Fetches 180-day TLE history for all active LEO satellites from Space-Track,
-converts to Parquet, uploads to a Databricks Unity Catalog Volume, and
-creates or merges into the tle_history Delta table.
+ONE-TIME bulk pull of 180-day TLE history for all active LEO satellites
+from Space-Track's gp_history endpoint. Filters applied server-side in a
+single request:
+  - MEAN_MOTION > 11.25   (LEO regime)
+  - EPOCH > now-180       (last 180 days)
+  - DECAY_DATE = null-val (still in orbit)
 
-Composite key: NORAD_CAT_ID + EPOCH (one row per satellite per TLE update)
+Skips entirely if drift_zero.orbital.tle_history already has > 1000 rows —
+this endpoint must never be called again once data is stored.
 
 Usage:
     python pipeline/ingest_tle_history.py
@@ -14,9 +18,8 @@ Usage:
 import io
 import os
 import sys
-import time
 import logging
-
+import time
 import pandas as pd
 import requests
 from databricks.sdk import WorkspaceClient
@@ -48,22 +51,23 @@ SPACETRACK_LEO_URL = (
 )
 
 # Historical TLE for a batch of NORAD IDs over the last 180 days
+# Single bulk query: LEO + last 180 days + on-orbit only
 SPACETRACK_HISTORY_URL = (
     "https://www.space-track.org/basicspacedata/query"
     "/class/gp_history"
-    "/NORAD_CAT_ID/{norad_ids}"
+    "/MEAN_MOTION/%3E11.25"
     "/EPOCH/%3Enow-180"
+    "/DECAY_DATE/null-val"
     "/orderby/NORAD_CAT_ID%20asc,EPOCH%20asc"
     "/format/json"
 )
 
-CATALOG = os.getenv("DATABRICKS_CATALOG", "drift_zero")
-SCHEMA = os.getenv("DATABRICKS_SCHEMA", "orbital")
+CATALOG    = os.getenv("DATABRICKS_CATALOG", "drift_zero")
+SCHEMA     = os.getenv("DATABRICKS_SCHEMA", "orbital")
 VOLUME_PATH = f"/Volumes/{CATALOG}/{SCHEMA}/raw"
-TABLE_NAME = f"{CATALOG}.{SCHEMA}.tle_history"
+TABLE_NAME  = f"{CATALOG}.{SCHEMA}.tle_history"
 
-BATCH_SIZE = 100       # NORAD IDs per Space-Track request
-BATCH_SLEEP_SEC = 1.5  # courtesy sleep between batches to avoid rate limits
+SKIP_THRESHOLD = 1000  # skip download if table already has this many rows
 
 TLE_COLUMNS = [
     "NORAD_CAT_ID",
@@ -114,48 +118,14 @@ def authenticate() -> requests.Session:
     return session
 
 
-def fetch_active_leo_norad_ids(session: requests.Session) -> list[str]:
-    """Returns NORAD_CAT_IDs for all active LEO satellites."""
-    log.info("Fetching active LEO satellite list...")
-    resp = session.get(SPACETRACK_LEO_URL, timeout=60)
+def fetch_history(session: requests.Session) -> list[dict]:
+    """Single bulk request for all LEO gp_history records in the last 180 days."""
+    log.info("Fetching bulk LEO TLE history from Space-Track (one-time pull)...")
+    resp = session.get(SPACETRACK_HISTORY_URL, timeout=300)
     resp.raise_for_status()
     records = resp.json()
-    ids = [r["NORAD_CAT_ID"] for r in records if r.get("NORAD_CAT_ID")]
-    log.info(f"Found {len(ids)} active LEO satellites")
-    return ids
-
-
-def fetch_history_batch(session: requests.Session, norad_ids: list[str]) -> list[dict]:
-    """Fetches 180-day TLE history for a batch of NORAD IDs."""
-    ids_str = ",".join(norad_ids)
-    url = SPACETRACK_HISTORY_URL.format(norad_ids=ids_str)
-    resp = session.get(url, timeout=120)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def fetch_all_history(session: requests.Session, norad_ids: list[str]) -> pd.DataFrame:
-    """
-    Fetches 180-day history for all NORAD IDs in batches.
-    Returns a single combined DataFrame.
-    """
-    batches = [
-        norad_ids[i : i + BATCH_SIZE]
-        for i in range(0, len(norad_ids), BATCH_SIZE)
-    ]
-    total = len(batches)
-    log.info(f"Fetching history in {total} batches of up to {BATCH_SIZE} satellites...")
-
-    all_records = []
-    for i, batch in enumerate(batches, start=1):
-        log.info(f"Batch {i}/{total} ({len(batch)} satellites)...")
-        records = fetch_history_batch(session, batch)
-        all_records.extend(records)
-        if i < total:
-            time.sleep(BATCH_SLEEP_SEC)
-
-    log.info(f"Total records fetched: {len(all_records)}")
-    return to_dataframe(all_records)
+    log.info(f"Received {len(records):,} records")
+    return records
 
 
 # ── Transform ─────────────────────────────────────────────────────────────────
@@ -177,33 +147,22 @@ def to_dataframe(records: list[dict]) -> pd.DataFrame:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    datetime_cols = ["EPOCH", "CREATION_DATE", "LAUNCH_DATE"]
-    for col in datetime_cols:
+    for col in ["EPOCH", "CREATION_DATE", "LAUNCH_DATE"]:
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors="coerce", utc=True)
             # Databricks only supports microsecond precision — cast down from nanoseconds
             df[col] = df[col].astype("datetime64[us, UTC]")
 
     df["NORAD_CAT_ID"] = df["NORAD_CAT_ID"].astype(str)
-
-    # Drop exact duplicates on composite key before upload
     df = df.drop_duplicates(subset=["NORAD_CAT_ID", "EPOCH"])
 
     log.info(f"DataFrame shape after dedup: {df.shape}")
     return df
 
 
-def to_parquet_bytes(df: pd.DataFrame) -> bytes:
-    buf = io.BytesIO()
-    df.to_parquet(buf, index=False, engine="pyarrow")
-    buf.seek(0)
-    return buf.read()
-
-
 # ── Databricks ────────────────────────────────────────────────────────────────
 
-def run_sql(w: WorkspaceClient, statement: str, warehouse_id: str) -> None:
-    import time
+def run_sql(w: WorkspaceClient, statement: str, warehouse_id: str):
     result = w.statement_execution.execute_statement(
         statement=statement,
         warehouse_id=warehouse_id,
@@ -220,22 +179,26 @@ def run_sql(w: WorkspaceClient, statement: str, warehouse_id: str) -> None:
     if state != "SUCCEEDED":
         error = result.status.error if result.status else None
         raise RuntimeError(f"SQL failed [{state}]: {error}")
+    return result
 
 
-def table_exists(w: WorkspaceClient, warehouse_id: str) -> bool:
+def existing_row_count(w: WorkspaceClient, warehouse_id: str) -> int:
+    """Returns current row count of tle_history, or 0 if it doesn't exist."""
     try:
-        run_sql(w, f"DESCRIBE TABLE {TABLE_NAME}", warehouse_id)
-        return True
+        result = run_sql(
+            w,
+            f"SELECT COUNT(*) as cnt FROM {TABLE_NAME}",
+            warehouse_id,
+        )
+        data = result.result.data_array
+        if data and data[0]:
+            return int(data[0][0])
     except RuntimeError:
-        return False
+        pass
+    return 0
 
 
-def upload_and_register(df: pd.DataFrame, warehouse_id: str) -> None:
-    w = WorkspaceClient(
-        host=os.getenv("DATABRICKS_HOST"),
-        token=os.getenv("DATABRICKS_TOKEN"),
-    )
-
+def upload_and_register(df: pd.DataFrame, w: WorkspaceClient, warehouse_id: str) -> None:
     file_path = f"{VOLUME_PATH}/tle_history.parquet"
 
     # Cast timestamps to microseconds — Databricks rejects nanosecond precision
@@ -264,8 +227,6 @@ def upload_and_register(df: pd.DataFrame, warehouse_id: str) -> None:
         warehouse_id,
     )
 
-    log.info(f"Table {TABLE_NAME} ready")
-
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -275,20 +236,29 @@ def main():
         log.error("DATABRICKS_WAREHOUSE_ID is not set")
         sys.exit(1)
 
-    session = authenticate()
-    norad_ids = fetch_active_leo_norad_ids(session)
+    w = WorkspaceClient(
+        host=os.getenv("DATABRICKS_HOST"),
+        token=os.getenv("DATABRICKS_TOKEN"),
+    )
 
-    if not norad_ids:
-        log.error("No active LEO satellites found — check Space-Track credentials/filters")
+    # Guard: skip if table is already populated
+    count = existing_row_count(w, warehouse_id)
+    if count > SKIP_THRESHOLD:
+        log.info(f"tle_history already has {count:,} rows — skipping download")
+        print(f"Row count: {count:,}")
+        return
+
+    session = authenticate()
+    records = fetch_history(session)
+
+    if not records:
+        log.error("No records returned from Space-Track")
         sys.exit(1)
 
-    df = fetch_all_history(session, norad_ids)
+    df = to_dataframe(records)
+    upload_and_register(df, w, warehouse_id)
 
-    if df.empty:
-        log.warning("No historical records returned — nothing to upload")
-        sys.exit(0)
-
-    upload_and_register(df, warehouse_id)
+    print(f"Row count: {len(df):,}")
     log.info("Historical TLE ingestion complete")
 
 

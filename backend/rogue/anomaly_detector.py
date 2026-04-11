@@ -1,7 +1,10 @@
+import math
 import numpy as np
 from sklearn.ensemble import IsolationForest
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
+
+from rogue.pol_model import SatelliteBaseline
 
 FEATURE_KEYS = [
     'delta_mean_motion', 'delta_eccentricity', 'delta_inclination',
@@ -56,9 +59,9 @@ class AnomalyDetector:
             0.25 * float(proximity_flag)
         )
 
-        if composite < 0.3:
+        if composite < 0.5:
             severity = "ROUTINE"
-        elif composite < 0.65:
+        elif composite < 0.72:
             severity = "SUSPICIOUS"
         else:
             severity = "ADVERSARIAL"
@@ -80,7 +83,6 @@ class AnomalyDetector:
         )
 
     def _describe(self, norad_id, severity, features, anomalous):
-        # Structured text passed to Claude API for NL generation
         return (
             f"NORAD {norad_id} | {severity} | "
             f"delta_v_proxy={features.get('delta_v_proxy', 0):.2f} m/s | "
