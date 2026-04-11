@@ -122,7 +122,6 @@ def _spacetrack_session() -> requests.Session:
             "SPACETRACK_EMAIL (or SPACETRACK_USERNAME) and SPACETRACK_PASSWORD "
             "must be set in .env"
         )
-
     session = requests.Session()
     resp = session.post(
         SPACETRACK_LOGIN,
@@ -140,13 +139,6 @@ def _spacetrack_session() -> requests.Session:
 def fetch_single_satellite(session: requests.Session, norad_id: int) -> dict:
     """
     Fetch the most recent GP record for a single satellite by NORAD CAT ID.
-
-    Args:
-        session:  Authenticated Space-Track session.
-        norad_id: NORAD Catalog ID of the target satellite.
-
-    Returns:
-        GP record dict from Space-Track.
 
     Raises:
         ValueError: If no record is found for the given NORAD ID.
@@ -168,11 +160,7 @@ def fetch_threat_catalog(session: requests.Session, limit: int = 1000) -> list[d
     ordered by most recent TLE epoch (freshest first).
 
     Args:
-        session: Authenticated Space-Track session.
-        limit:   Total catalog size; split evenly between PAYLOAD and DEBRIS.
-
-    Returns:
-        Combined list of GP record dicts.
+        limit: Total catalog size; split evenly between PAYLOAD and DEBRIS.
     """
     half = max(1, limit // 2)
     log.info("Fetching threat catalog (%d PAYLOAD + %d DEBRIS)...", half, half)
@@ -202,8 +190,7 @@ def _fetch_kp() -> Optional[float]:
     Each data row: [time_tag, kp_value, quality_string].
     Quality values: 'observed' | 'estimated' | 'predicted'.
 
-    Returns the Kp float, or None if the fetch/parse fails (pipeline continues
-    without the solar weather override in that case).
+    Returns None on failure; pipeline continues without the solar override.
     """
     try:
         resp = requests.get(NOAA_KP_URL, timeout=10)
@@ -220,7 +207,6 @@ def _fetch_kp() -> Optional[float]:
     kp_val: Optional[float] = None
 
     if isinstance(data[0], list):
-        # list-of-lists: row 0 is the header row, skip it
         for row in data[1:]:
             if len(row) >= 3 and str(row[2]).strip().lower() == "observed":
                 try:
@@ -287,11 +273,8 @@ def _screen_catalog(primary: dict, catalog: list[dict]) -> list[dict]:
     Filter catalog objects down to those that could conjunct with the primary.
 
     Applies the same altitude-band-overlap and inclination-similarity checks
-    as screen.py, but with the primary satellite fixed on side A.
-
-    Args:
-        primary: GP record dict for the user's satellite.
-        catalog: List of GP record dicts to screen against.
+    as screen.py, but with the primary satellite fixed on side A (O(n) instead
+    of O(n²)).
 
     Returns:
         Subset of catalog records that passed the proximity filter.
