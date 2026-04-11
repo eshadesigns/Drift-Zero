@@ -1,4 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+// GlobeView lives on Kushagra's branch — placeholder here for dev
+const GlobeView = () => <div className="w-full h-full bg-gray-900 flex items-center justify-center text-gray-600 text-sm">Globe (Kushagra)</div>
 import StatsBar from './components/dashboard/StatsBar'
 import AlertQueue from './components/dashboard/AlertQueue'
 import ManeuverPanel from './components/dashboard/ManeuverPanel'
@@ -16,7 +18,7 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false)
   const containerRef = useRef(null)
 
-  // ── Drag logic ──────────────────────────────────────────────────────────────
+  // ── Drag logic ───────────────────────────────────────────────────────────────
   const onDividerMouseDown = useCallback((e) => {
     e.preventDefault()
     setIsDragging(true)
@@ -45,33 +47,24 @@ export default function App() {
 
   // ── Collapse logic ───────────────────────────────────────────────────────────
   const collapseGlobe = () => {
-    if (collapsed === 'globe') {
-      setCollapsed(null)
-      setSplitPct(DEFAULT_SPLIT)
-    } else {
-      setCollapsed('globe')
-    }
+    if (collapsed === 'globe') { setCollapsed(null); setSplitPct(DEFAULT_SPLIT) }
+    else setCollapsed('globe')
   }
 
   const collapsePanels = () => {
-    if (collapsed === 'panels') {
-      setCollapsed(null)
-      setSplitPct(DEFAULT_SPLIT)
-    } else {
-      setCollapsed('panels')
-    }
+    if (collapsed === 'panels') { setCollapsed(null); setSplitPct(DEFAULT_SPLIT) }
+    else setCollapsed('panels')
   }
 
-  // ── Width resolution ─────────────────────────────────────────────────────────
-  const globeWidth  = collapsed === 'globe'  ? '0%'
-                    : collapsed === 'panels' ? '100%'
-                    : `${splitPct}%`
+  const globeWidth = collapsed === 'globe'  ? '0%'
+                   : collapsed === 'panels' ? '100%'
+                   : `${splitPct}%`
 
-  const panelWidth  = collapsed === 'panels' ? '0%'
-                    : collapsed === 'globe'  ? '100%'
-                    : `${100 - splitPct}%`
+  const panelWidth = collapsed === 'panels' ? '0%'
+                   : collapsed === 'globe'  ? '100%'
+                   : `${100 - splitPct}%`
 
-  const showDivider = collapsed === null
+  const transition = isDragging ? 'none' : 'width 0.25s ease'
 
   return (
     <div className="flex flex-col h-screen bg-gray-950 text-white select-none">
@@ -80,45 +73,33 @@ export default function App() {
 
       <div ref={containerRef} className="flex flex-1 overflow-hidden relative">
 
-        {/* ── Globe pane — Kushagra's zone, do not touch ── */}
-        <div
-          style={{ width: globeWidth, transition: isDragging ? 'none' : 'width 0.25s ease' }}
-          className="h-full overflow-hidden shrink-0"
-        >
-          <div className="w-full h-full flex items-center justify-center text-gray-700 text-sm">
-            {/* GlobeView mounts here */}
-          </div>
+        {/* ── Globe pane — Kushagra's zone ── */}
+        <div style={{ width: globeWidth, transition }} className="h-full overflow-hidden shrink-0">
+          <GlobeView />
         </div>
 
         {/* ── Resizable divider ── */}
-        {showDivider && (
+        {!collapsed && (
           <div
             onMouseDown={onDividerMouseDown}
             className="relative z-10 flex flex-col items-center justify-center w-[6px] shrink-0 bg-gray-800 hover:bg-blue-500 cursor-col-resize transition-colors group"
           >
-            {/* Collapse panels → (show full globe) */}
             <button
               onMouseDown={(e) => e.stopPropagation()}
               onClick={collapsePanels}
               className="absolute top-[40%] -translate-y-full mb-1 w-5 h-5 rounded-sm bg-gray-700 hover:bg-blue-600 text-gray-300 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
               title="Expand globe"
-            >
-              ›
-            </button>
-
-            {/* Collapse globe → (show full panels) */}
+            >›</button>
             <button
               onMouseDown={(e) => e.stopPropagation()}
               onClick={collapseGlobe}
               className="absolute top-[40%] translate-y-full mt-1 w-5 h-5 rounded-sm bg-gray-700 hover:bg-blue-600 text-gray-300 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
               title="Expand panels"
-            >
-              ‹
-            </button>
+            >‹</button>
           </div>
         )}
 
-        {/* Restore divider when collapsed */}
+        {/* Restore button when collapsed */}
         {collapsed && (
           <button
             onClick={() => { setCollapsed(null); setSplitPct(DEFAULT_SPLIT) }}
@@ -133,7 +114,7 @@ export default function App() {
 
         {/* ── Dashboard panels ── */}
         <div
-          style={{ width: panelWidth, transition: isDragging ? 'none' : 'width 0.25s ease' }}
+          style={{ width: panelWidth, transition }}
           className="h-full flex flex-col border-l border-gray-800 overflow-y-auto overflow-x-hidden shrink-0"
         >
           <AlertQueue
