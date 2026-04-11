@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ':*)",
+      "Bash(pip show:*)",
+      "Bash(python test/test_operator_profiling.py)",
+      "Bash(pip list:*)",
+      "Bash(python -c \"import databricks\")",
+      "Bash(python -c \"import skyfield\")",
+      "Bash(.venv\\\\Scripts\\\\pip install:*)",
+      "Bash(.venv/Scripts/pip install:*)"
+    ]
+  }
+}

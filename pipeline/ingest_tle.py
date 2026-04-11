@@ -148,12 +148,20 @@ def to_parquet_bytes(df: pd.DataFrame) -> bytes:
 # ── Databricks ────────────────────────────────────────────────────────────────
 
 def run_sql(w: WorkspaceClient, statement: str, warehouse_id: str) -> None:
+    import time
     result = w.statement_execution.execute_statement(
         statement=statement,
         warehouse_id=warehouse_id,
-        wait_timeout="50s",
+        wait_timeout="0s",
     )
-    state = result.status.state.value if result.status else "UNKNOWN"
+    statement_id = result.statement_id
+    while True:
+        result = w.statement_execution.get_statement(statement_id)
+        state = result.status.state.value if result.status else "UNKNOWN"
+        if state in ("SUCCEEDED", "FAILED", "CANCELED", "CLOSED"):
+            break
+        log.info(f"  SQL state: {state} — waiting...")
+        time.sleep(5)
     if state != "SUCCEEDED":
         error = result.status.error if result.status else None
         raise RuntimeError(f"SQL failed [{state}]: {error}")
