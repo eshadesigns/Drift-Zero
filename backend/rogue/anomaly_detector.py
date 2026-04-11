@@ -1,3 +1,4 @@
+import numpy as np
 from sklearn.ensemble import IsolationForest
 from dataclasses import dataclass
 from datetime import datetime
