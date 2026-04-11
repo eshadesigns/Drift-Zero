@@ -1,49 +1,10 @@
-<<<<<<< Updated upstream
-=======
 import math
->>>>>>> Stashed changes
 import numpy as np
 from sklearn.ensemble import IsolationForest
 from dataclasses import dataclass, field
 from datetime import datetime
 
-@dataclass
-class SatelliteBaseline:
-    """
-    Per-satellite running statistics using Welford's online algorithm.
-    Used by AnomalyDetector for z-score computation.
-    """
-    norad_id: int
-    cluster_id: int = 0
-    means: dict = field(default_factory=dict)
-    stds: dict = field(default_factory=dict)
-    n: int = 0
-    m2: dict = field(default_factory=dict, repr=False)  # sum of squared deviations
-
-    def update(self, features: dict) -> None:
-        self.n += 1
-        for k, v in features.items():
-            if not isinstance(v, (int, float)) or math.isnan(float(v)):
-                continue
-            v = float(v)
-            if k not in self.means:
-                self.means[k] = v
-                self.m2[k] = 0.0
-                self.stds[k] = 0.0
-            else:
-                delta = v - self.means[k]
-                self.means[k] += delta / self.n
-                delta2 = v - self.means[k]
-                self.m2[k] += delta * delta2
-                if self.n > 1:
-                    self.stds[k] = math.sqrt(self.m2[k] / (self.n - 1))
-
-    def zscore(self, key: str, value: float) -> float:
-        std = self.stds.get(key, 0.0)
-        if std < 1e-9:
-            return 0.0
-        return abs(float(value) - self.means.get(key, float(value))) / std
-
+from rogue.pol_model import SatelliteBaseline
 
 FEATURE_KEYS = [
     'delta_mean_motion', 'delta_eccentricity', 'delta_inclination',
@@ -98,9 +59,9 @@ class AnomalyDetector:
             0.25 * float(proximity_flag)
         )
 
-        if composite < 0.3:
+        if composite < 0.5:
             severity = "ROUTINE"
-        elif composite < 0.65:
+        elif composite < 0.72:
             severity = "SUSPICIOUS"
         else:
             severity = "ADVERSARIAL"
@@ -122,7 +83,6 @@ class AnomalyDetector:
         )
 
     def _describe(self, norad_id, severity, features, anomalous):
-        # Structured text passed to Claude API for NL generation
         return (
             f"NORAD {norad_id} | {severity} | "
             f"delta_v_proxy={features.get('delta_v_proxy', 0):.2f} m/s | "
