@@ -46,6 +46,7 @@ from fastapi import FastAPI, HTTPException, Query
 from backend.shield.propagate import parse_satrec
 from backend.shield.tca import find_tca
 from backend.shield.probability import compute_probability
+from backend.shield.maneuver import compute_maneuvers
 
 # ── Config ────────────────────────────────────────────────────────────────────
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
@@ -723,6 +724,29 @@ async def get_satellite(norad_id: int):
         "eccentricity":    rec.get("ECCENTRICITY"),
         "tle_epoch":       rec.get("EPOCH", ""),
     }
+
+
+@app.get("/maneuvers/{norad_id}/{event_id}")
+async def get_maneuvers(norad_id: int, event_id: str):
+    """
+    Run the conjunction pipeline for norad_id, find the matching event_id,
+    and return three maneuver options (Maximum Safety, Balanced, Fuel Efficient).
+    """
+    try:
+        events = run_pipeline(norad_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    event = next((e for e in events if e["event_id"] == event_id), None)
+    if event is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Event {event_id!r} not found in conjunction results for NORAD {norad_id}",
+        )
+
+    return compute_maneuvers(event)
 
 
 @app.get("/conjunctions/{norad_id}")
