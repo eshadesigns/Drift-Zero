@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
+  // Read .env from repo root
   envDir: '../',
-  plugins: [react(), tailwindcss()],
+  plugins: [react()],
 })
