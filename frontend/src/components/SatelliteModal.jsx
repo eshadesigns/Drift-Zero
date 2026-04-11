@@ -15,7 +15,7 @@ const STAT_ROWS = [
   { key: 'launched',    label: 'Launch Date'          },
 ]
 
-export default function SatelliteModal({ sat, onClose }) {
+export default function SatelliteModal({ sat, onClose, onAnalyze, analyzed = false, riskCount = 0 }) {
   // Close on Escape
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
@@ -167,6 +167,76 @@ export default function SatelliteModal({ sat, onClose }) {
             ))}
           </div>
         </div>
+
+        {/* Trajectory analysis — satellites only */}
+        {sat.type === 'satellite' && (
+          <div style={{ padding: '0 22px 14px' }}>
+            <p style={{
+              margin: '0 0 10px',
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
+              color: 'rgba(244,247,251,0.38)', textTransform: 'uppercase',
+            }}>
+              Trajectory Analysis
+            </p>
+
+            {!analyzed ? (
+              /* ── Analyze button ── */
+              <button
+                onClick={onAnalyze}
+                style={{
+                  width: '100%', padding: '11px 0',
+                  border: '1px solid rgba(141,216,255,0.3)',
+                  borderRadius: 10,
+                  background: 'rgba(141,216,255,0.07)',
+                  color: '#8dd8ff',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  fontSize: 12, fontWeight: 700, letterSpacing: '0.04em',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  transition: 'background 0.15s, border-color 0.15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background='rgba(141,216,255,0.14)'; e.currentTarget.style.borderColor='rgba(141,216,255,0.55)' }}
+                onMouseLeave={e => { e.currentTarget.style.background='rgba(141,216,255,0.07)'; e.currentTarget.style.borderColor='rgba(141,216,255,0.3)' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <circle cx="7" cy="7" r="5.5" stroke="#8dd8ff" strokeWidth="1.3" strokeDasharray="3 2"/>
+                  <circle cx="7" cy="7" r="1.5" fill="#8dd8ff"/>
+                  <circle cx="11" cy="4" r="1" fill="#8dd8ff"/>
+                </svg>
+                Analyze Trajectory
+              </button>
+            ) : (
+              /* ── Risk results ── */
+              <>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '12px 14px', borderRadius: 10,
+                  background: riskCount > 0 ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.08)',
+                  border: `1px solid ${riskCount > 0 ? 'rgba(239,68,68,0.25)' : 'rgba(34,197,94,0.2)'}`,
+                }}>
+                  <span style={{
+                    fontSize: 22, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1,
+                    color: riskCount > 0 ? '#f87171' : '#86efac',
+                  }}>
+                    {riskCount}
+                  </span>
+                  <span style={{
+                    fontSize: 12, fontWeight: 500, lineHeight: 1.4,
+                    color: riskCount > 0 ? 'rgba(248,113,113,0.85)' : 'rgba(134,239,172,0.85)',
+                  }}>
+                    {riskCount > 0
+                      ? `object${riskCount !== 1 ? 's' : ''} within 700 km of orbital path`
+                      : 'No close approaches detected'}
+                  </span>
+                </div>
+                {riskCount > 0 && (
+                  <p style={{ margin: '8px 0 0', fontSize: 11, color: 'rgba(244,247,251,0.35)', lineHeight: 1.5 }}>
+                    Risk objects marked with red rings on the globe. Pan freely to explore.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {/* Status pill */}
         <div style={{ padding: '0 22px 24px' }}>

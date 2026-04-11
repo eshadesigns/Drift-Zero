@@ -74,64 +74,37 @@ const SAT_TLES = [
   },
 ]
 
-// Static debris (no TLE — fixed positions for demo)
+// Static debris — fixed positions for simulation
 const DEBRIS_STATIC = [
-  {
-    id: 'DEB1', name: 'SL-16 R/B DEB', type: 'debris',
-    noradId: 22220, lat: -20, lon: 80, alt: 780,
-    velocity: 7.40, inclination: 82.9, period: 100.4,
-    country: 'Russia', status: 'Debris', launched: '1993-01-12',
-    description: 'Rocket body debris from a Zenit-2 upper stage.',
-  },
-  {
-    id: 'DEB2', name: 'FENGYUN 1C DEB', type: 'debris',
-    noradId: 29228, lat: 15, lon: -60, alt: 845,
-    velocity: 7.35, inclination: 98.6, period: 101.9,
-    country: 'China', status: 'Debris', launched: '2007-01-11',
-    description: 'Fragment from Chinese ASAT test against FY-1C (2007).',
-  },
-  {
-    id: 'DEB3', name: 'COSMOS 954 DEB', type: 'debris',
-    noradId: 10365, lat: 65, lon: 30, alt: 640,
-    velocity: 7.52, inclination: 65.0, period: 97.5,
-    country: 'Russia', status: 'Debris', launched: '1977-09-18',
-    description: 'Nuclear-powered Soviet satellite debris.',
-  },
-  {
-    id: 'DEB4', name: 'IRIDIUM 33 DEB', type: 'debris',
-    noradId: 33442, lat: -35, lon: 150, alt: 776,
-    velocity: 7.41, inclination: 86.4, period: 100.3,
-    country: 'USA', status: 'Debris', launched: '2009-02-10',
-    description: 'Fragment from the 2009 Iridium–Cosmos collision.',
-  },
-  {
-    id: 'DEB5', name: 'COSMOS 2251 DEB', type: 'debris',
-    noradId: 33446, lat: -10, lon: -140, alt: 800,
-    velocity: 7.38, inclination: 74.0, period: 100.8,
-    country: 'Russia', status: 'Debris', launched: '2009-02-10',
-    description: 'Fragment from the 2009 Iridium–Cosmos collision.',
-  },
-  {
-    id: 'DEB6', name: 'SL-8 R/B', type: 'debris',
-    noradId: 9285, lat: 40, lon: -20, alt: 960,
-    velocity: 7.29, inclination: 74.0, period: 104.2,
-    country: 'Russia', status: 'Debris', launched: '1976-06-22',
-    description: 'Cosmos rocket body in low Earth orbit since 1976.',
-  },
-  {
-    id: 'DEB7', name: 'BREEZE-M DEB', type: 'debris',
-    noradId: 36033, lat: -55, lon: -100, alt: 495,
-    velocity: 7.61, inclination: 49.9, period: 94.5,
-    country: 'Russia', status: 'Debris', launched: '2010-02-01',
-    description: 'Propellant tank fragment from a Proton-M Breeze-M stage.',
-  },
-  {
-    id: 'DEB8', name: 'BREEZE-M DEB #2', type: 'debris',
-    noradId: 36034, lat: 25, lon: 100, alt: 350,
-    velocity: 7.73, inclination: 51.6, period: 90.6,
-    country: 'Russia', status: 'Debris', launched: '2010-02-01',
-    description: 'Secondary fragment from Proton-M Breeze-M breakup.',
-  },
+  { id:'DEB1',  name:'SL-16 R/B DEB',         type:'debris', noradId:22220, lat:-20,  lon:80,   alt:780,  velocity:7.40, inclination:82.9, period:100.4, country:'Russia', status:'Debris', launched:'1993-01-12', description:'Rocket body debris from a Zenit-2 upper stage.' },
+  { id:'DEB2',  name:'FENGYUN 1C DEB',         type:'debris', noradId:29228, lat:15,   lon:-60,  alt:845,  velocity:7.35, inclination:98.6, period:101.9, country:'China',  status:'Debris', launched:'2007-01-11', description:'Fragment from Chinese ASAT test against FY-1C (2007).' },
+  { id:'DEB3',  name:'COSMOS 954 DEB',         type:'debris', noradId:10365, lat:65,   lon:30,   alt:640,  velocity:7.52, inclination:65.0, period:97.5,  country:'Russia', status:'Debris', launched:'1977-09-18', description:'Nuclear-powered Soviet satellite debris.' },
+  { id:'DEB4',  name:'IRIDIUM 33 DEB',         type:'debris', noradId:33442, lat:-35,  lon:150,  alt:776,  velocity:7.41, inclination:86.4, period:100.3, country:'USA',    status:'Debris', launched:'2009-02-10', description:'Fragment from the 2009 Iridium–Cosmos collision.' },
+  { id:'DEB5',  name:'COSMOS 2251 DEB',        type:'debris', noradId:33446, lat:-10,  lon:-140, alt:800,  velocity:7.38, inclination:74.0, period:100.8, country:'Russia', status:'Debris', launched:'2009-02-10', description:'Fragment from the 2009 Iridium–Cosmos collision.' },
+  { id:'DEB6',  name:'SL-8 R/B',               type:'debris', noradId:9285,  lat:40,   lon:-20,  alt:960,  velocity:7.29, inclination:74.0, period:104.2, country:'Russia', status:'Debris', launched:'1976-06-22', description:'Cosmos rocket body in low Earth orbit since 1976.' },
+  { id:'DEB7',  name:'BREEZE-M DEB',           type:'debris', noradId:36033, lat:-55,  lon:-100, alt:495,  velocity:7.61, inclination:49.9, period:94.5,  country:'Russia', status:'Debris', launched:'2010-02-01', description:'Propellant tank fragment from a Proton-M Breeze-M stage.' },
+  { id:'DEB8',  name:'BREEZE-M DEB #2',        type:'debris', noradId:36034, lat:25,   lon:100,  alt:350,  velocity:7.73, inclination:51.6, period:90.6,  country:'Russia', status:'Debris', launched:'2010-02-01', description:'Secondary fragment from Proton-M Breeze-M breakup.' },
+  // Extended catalogue
+  { id:'DEB9',  name:'COSMOS 1408 DEB',        type:'debris', noradId:49271, lat:48,   lon:60,   alt:470,  velocity:7.63, inclination:82.6, period:94.2,  country:'Russia', status:'Debris', launched:'2021-11-15', description:'Fragment from Russian ASAT test against Cosmos 1408.' },
+  { id:'DEB10', name:'COSMOS 1408 DEB #2',     type:'debris', noradId:49272, lat:52,   lon:80,   alt:490,  velocity:7.62, inclination:82.6, period:94.4,  country:'Russia', status:'Debris', launched:'2021-11-15', description:'Fragment from Russian ASAT test against Cosmos 1408.' },
+  { id:'DEB11', name:'COSMOS 1408 DEB #3',     type:'debris', noradId:49273, lat:44,   lon:40,   alt:440,  velocity:7.65, inclination:82.6, period:93.8,  country:'Russia', status:'Debris', launched:'2021-11-15', description:'Fragment from Russian ASAT test against Cosmos 1408.' },
+  { id:'DEB12', name:'SL-4 R/B DEB',           type:'debris', noradId:7337,  lat:-42,  lon:-80,  alt:610,  velocity:7.54, inclination:65.8, period:97.0,  country:'Russia', status:'Debris', launched:'1974-06-24', description:'Soyuz rocket body from 1974 launch.' },
+  { id:'DEB13', name:'DELTA 1 DEB',            type:'debris', noradId:3733,  lat:28,   lon:-120, alt:740,  velocity:7.42, inclination:28.3, period:99.8,  country:'USA',    status:'Debris', launched:'1971-09-15', description:'Delta rocket upper stage fragment.' },
+  { id:'DEB14', name:'ARIANE 44LP DEB',        type:'debris', noradId:22828, lat:-8,   lon:175,  alt:590,  velocity:7.56, inclination:7.0,  period:96.3,  country:'EU',     status:'Debris', launched:'1994-01-24', description:'Ariane rocket body in low Earth orbit.' },
+  { id:'DEB15', name:'THORAD AGENA D DEB',     type:'debris', noradId:4632,  lat:70,   lon:-50,  alt:920,  velocity:7.31, inclination:99.9, period:103.5, country:'USA',    status:'Debris', launched:'1968-08-16', description:'Agena upper stage from 1968 reconnaissance mission.' },
+  { id:'DEB16', name:'SL-3 R/B DEB',           type:'debris', noradId:2611,  lat:-60,  lon:130,  alt:520,  velocity:7.60, inclination:65.0, period:95.0,  country:'Russia', status:'Debris', launched:'1965-04-10', description:'Vostok rocket body from early Soviet mission.' },
+  { id:'DEB17', name:'FENGYUN 1C DEB #2',      type:'debris', noradId:29300, lat:20,   lon:90,   alt:860,  velocity:7.34, inclination:98.7, period:102.2, country:'China',  status:'Debris', launched:'2007-01-11', description:'Second fragment from FY-1C ASAT test debris field.' },
+  { id:'DEB18', name:'FENGYUN 1C DEB #3',      type:'debris', noradId:29400, lat:-15,  lon:160,  alt:820,  velocity:7.36, inclination:98.5, period:101.5, country:'China',  status:'Debris', launched:'2007-01-11', description:'Third fragment from FY-1C ASAT test debris field.' },
+  { id:'DEB19', name:'IRIDIUM 33 DEB #2',      type:'debris', noradId:33500, lat:40,   lon:-170, alt:760,  velocity:7.41, inclination:86.5, period:100.1, country:'USA',    status:'Debris', launched:'2009-02-10', description:'Secondary fragment from Iridium–Cosmos collision.' },
+  { id:'DEB20', name:'IRIDIUM 33 DEB #3',      type:'debris', noradId:33501, lat:-50,  lon:110,  alt:790,  velocity:7.39, inclination:86.3, period:100.5, country:'USA',    status:'Debris', launched:'2009-02-10', description:'Third fragment from Iridium–Cosmos collision cloud.' },
+  { id:'DEB21', name:'SL-12 R/B DEB',          type:'debris', noradId:19820, lat:30,   lon:50,   alt:410,  velocity:7.68, inclination:51.8, period:92.8,  country:'Russia', status:'Debris', launched:'1989-03-01', description:'Proton upper stage near ISS orbital altitude.' },
+  { id:'DEB22', name:'SL-12 R/B DEB #2',       type:'debris', noradId:19821, lat:-30,  lon:-30,  alt:420,  velocity:7.67, inclination:51.6, period:93.0,  country:'Russia', status:'Debris', launched:'1989-03-01', description:'Second Proton fragment at ISS altitude range.' },
+  { id:'DEB23', name:'PEGASUS DEB',            type:'debris', noradId:23106, lat:35,   lon:170,  alt:550,  velocity:7.58, inclination:28.9, period:95.5,  country:'USA',    status:'Debris', launched:'1994-05-19', description:'Pegasus rocket body at Starlink operational altitude.' },
+  { id:'DEB24', name:'COSMOS 3M R/B DEB',      type:'debris', noradId:28171, lat:-45,  lon:-60,  alt:560,  velocity:7.57, inclination:82.9, period:95.7,  country:'Russia', status:'Debris', launched:'2003-06-20', description:'Cosmos-3M rocket body fragment.' },
+  { id:'DEB25', name:'CZ-4B R/B DEB',          type:'debris', noradId:37820, lat:55,   lon:-130, alt:700,  velocity:7.45, inclination:98.2, period:98.7,  country:'China',  status:'Debris', launched:'2011-11-09', description:'Chinese Long March upper stage at polar orbit.' },
+  { id:'DEB26', name:'ATLAS CENTAUR DEB',      type:'debris', noradId:1911,  lat:-25,  lon:20,   alt:880,  velocity:7.33, inclination:28.9, period:102.6, country:'USA',    status:'Debris', launched:'1965-05-09', description:'Atlas Centaur upper stage from 1965 — oldest tracked debris.' },
+  { id:'DEB27', name:'SL-16 R/B DEB #2',       type:'debris', noradId:25407, lat:38,   lon:-90,  alt:810,  velocity:7.37, inclination:82.6, period:101.2, country:'Russia', status:'Debris', launched:'1998-07-07', description:'Zenit-2 upper stage fragment.' },
+  { id:'DEB28', name:'H-2A R/B DEB',           type:'debris', noradId:27600, lat:-65,  lon:80,   alt:670,  velocity:7.49, inclination:98.2, period:98.1,  country:'Japan',  status:'Debris', launched:'2003-03-28', description:'Japanese H-2A rocket body in sun-synchronous orbit.' },
 ]
 
 // All catalogue objects (flat list for modal lookup)
@@ -140,20 +113,111 @@ const ALL_OBJECTS = [
   ...DEBRIS_STATIC,
 ]
 
+// ── Debris orbit simulator ───────────────────────────────────────────────────
+// Computes a circular orbit passing through the debris's current lat/lon
+// using its inclination and altitude (no TLE available for debris).
+function simulateDebrisOrbit(debris, STEPS, Cesium) {
+  const lat0 = debris.lat * Math.PI / 180
+  const lon0 = debris.lon * Math.PI / 180
+  const inc  = Math.abs(debris.inclination ?? 60) * Math.PI / 180
+  const alt  = debris.alt * 1000  // km → m
+
+  // Edge case: near-equatorial
+  if (inc < 0.01) {
+    return Array.from({ length: STEPS + 1 }, (_, i) =>
+      Cesium.Cartesian3.fromRadians(lon0 + (i / STEPS) * 2 * Math.PI, 0, alt)
+    )
+  }
+
+  // Find argument of latitude at current position, then ascending node lon
+  const sinU0  = Math.max(-1, Math.min(1, Math.sin(lat0) / Math.sin(inc)))
+  const u0     = Math.asin(sinU0)
+  const dLon0  = Math.atan2(Math.cos(inc) * Math.sin(u0), Math.cos(u0))
+  const lonAN  = lon0 - dLon0
+
+  return Array.from({ length: STEPS + 1 }, (_, i) => {
+    const u    = u0 + (i / STEPS) * 2 * Math.PI
+    const lat  = Math.asin(Math.sin(inc) * Math.sin(u))
+    const dLon = Math.atan2(Math.cos(inc) * Math.sin(u), Math.cos(u))
+    return Cesium.Cartesian3.fromRadians(lonAN + dLon, lat, alt)
+  })
+}
+
+// ── Satellite icon ────────────────────────────────────────────────────────────
+function makeSatelliteIcon(color = '#8dd8ff', size = 32) {
+  const c = document.createElement('canvas')
+  c.width = size
+  c.height = size
+  const ctx = c.getContext('2d')
+  const cx = size / 2
+  const cy = size / 2
+
+  ctx.shadowBlur   = 6
+  ctx.shadowColor  = color
+  ctx.fillStyle    = color
+  ctx.strokeStyle  = color
+
+  // Left solar panel
+  ctx.fillRect(cx - 13, cy - 2, 7, 4)
+  // Panel divider line
+  ctx.globalAlpha = 0.4
+  ctx.fillStyle = '#010204'
+  ctx.fillRect(cx - 10, cy - 2, 1, 4)
+  ctx.globalAlpha = 1
+  ctx.fillStyle = color
+
+  // Right solar panel
+  ctx.fillRect(cx + 6, cy - 2, 7, 4)
+  ctx.globalAlpha = 0.4
+  ctx.fillStyle = '#010204'
+  ctx.fillRect(cx + 9, cy - 2, 1, 4)
+  ctx.globalAlpha = 1
+  ctx.fillStyle = color
+
+  // Main body
+  ctx.fillRect(cx - 5, cy - 4, 10, 8)
+
+  // Antenna dish
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.moveTo(cx + 2, cy - 4)
+  ctx.lineTo(cx + 5, cy - 9)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.arc(cx + 5, cy - 9, 2.5, 0, Math.PI * 2)
+  ctx.stroke()
+
+  // Body highlight
+  ctx.globalAlpha = 0.5
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(cx - 3, cy - 3, 3, 2)
+  ctx.globalAlpha = 1
+
+  return c
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function GlobeView() {
-  const containerRef  = useRef(null)
-  const viewerRef     = useRef(null)
-  const satrecs       = useRef({})   // id → satrec
-  const entitiesRef   = useRef({})   // id → Cesium.Entity
-  const listenerRef   = useRef(null) // postUpdate listener
-  const clickRef      = useRef(null) // ScreenSpaceEventHandler
-  const moveRef       = useRef(null)
+  const containerRef       = useRef(null)
+  const viewerRef          = useRef(null)
+  const satrecs            = useRef({})    // id → satrec
+  const entitiesRef        = useRef({})    // id → Cesium.Entity
+  const listenerRef        = useRef(null)  // postUpdate listener
+  const clickRef           = useRef(null)
+  const moveRef            = useRef(null)
+  const trajectoryRef      = useRef(null)  // selected orbit path entity
+  const riskEntitiesRef    = useRef([])    // red-ring entities for at-risk objects
+  const allTrajRef         = useRef([])    // all-trajectories overlay entities
+  const analyzeModeRef     = useRef(false) // keep click handler in sync without re-init
 
-  const [selected, setSelected] = useState(null)
-  const [hovered, setHovered]   = useState(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError]       = useState(null)
+  const [selected, setSelected]         = useState(null)
+  const [hovered, setHovered]           = useState(null)
+  const [isLoading, setIsLoading]       = useState(true)
+  const [error, setError]               = useState(null)
+  const [riskCount, setRiskCount]       = useState(0)
+  const [showAllTraj, setShowAllTraj]   = useState(false)
+  const [analyzed, setAnalyzed]         = useState(false)
+  const [analyzeMode, setAnalyzeMode]   = useState(false) // panel hidden, free pan
 
   const satCount    = SAT_TLES.length
   const debrisCount = DEBRIS_STATIC.length
@@ -200,11 +264,72 @@ export default function GlobeView() {
         viewer.scene.globe.showGroundAtmosphere   = true
         viewer.scene.fog.enabled                  = false
 
+        // ── Camera constraints ──────────────────────────────────────────────
+        viewer.camera.constrainedAxis = Cesium.Cartesian3.UNIT_Z
+
+        const ctrl = viewer.scene.screenSpaceCameraController
+        ctrl.minimumZoomDistance = 500_000
+        ctrl.maximumZoomDistance = 28_000_000
+
+        // ── Rotation: left-drag rotates the globe ───────────────────────────
+        ctrl.rotateEventTypes = [Cesium.CameraEventType.LEFT_DRAG]
+        ctrl.tiltEventTypes   = [
+          Cesium.CameraEventType.MIDDLE_DRAG,
+          { eventType: Cesium.CameraEventType.LEFT_DRAG, modifier: Cesium.KeyboardEventModifier.CTRL },
+        ]
+
+        // ── Scroll zoom: nadir movement keeps Earth in frame ─────────────────
+        ctrl.zoomEventTypes = [] // replace built-in zoom with custom handler
+
+        viewer.scene.canvas.addEventListener('wheel', (e) => {
+          e.preventDefault()
+          const camera    = viewer.camera
+          const height    = camera.positionCartographic.height
+          const zoomingIn = e.deltaY < 0
+
+          // Hard limits
+          if (!zoomingIn && height >= 28_000_000) return
+          if ( zoomingIn && height <= 500_000)    return
+
+          // Normalise across browsers (pixel / line / page deltaMode)
+          let raw = e.deltaY
+          if (e.deltaMode === 1) raw *= 40
+          if (e.deltaMode === 2) raw *= 800
+
+          // Speed matches Cesium default: ~30% of altitude per standard tick
+          const speed = (Math.abs(raw) / 120) * height * 0.3
+          // Positive = toward Earth (zoom in), negative = away (zoom out)
+          const movement = zoomingIn ? speed : -speed
+
+          // Nadir = direction from camera toward Earth center
+          const nadir = Cesium.Cartesian3.normalize(
+            Cesium.Cartesian3.negate(camera.positionWC, new Cesium.Cartesian3()),
+            new Cesium.Cartesian3()
+          )
+          camera.move(nadir, movement)
+
+          // When zooming out, gently level pitch toward top-down
+          // so Earth re-centres naturally as you pull back
+          if (!zoomingIn) {
+            const t = Math.min(height / 12_000_000, 1) * 0.12
+            camera.setView({
+              orientation: {
+                heading: camera.heading,
+                pitch:   camera.pitch + (-Cesium.Math.PI_OVER_TWO - camera.pitch) * t,
+                roll:    0,
+              },
+            })
+          }
+        }, { passive: false })
+
         // ── Default camera ──────────────────────────────────────────────────
         viewer.camera.flyTo({
           destination: Cesium.Cartesian3.fromDegrees(20, 20, 22_000_000),
           duration: 0,
         })
+
+        // ── Satellite icon (SVG → data URL) ────────────────────────────────
+        const SAT_ICON = makeSatelliteIcon()
 
         // ── Add TLE satellites ──────────────────────────────────────────────
         SAT_TLES.forEach((obj) => {
@@ -212,26 +337,39 @@ export default function GlobeView() {
           satrecs.current[obj.id] = satrec
 
           const entity = viewer.entities.add({
-            id:    obj.id,
-            name:  obj.name,
+            id:   obj.id,
+            name: obj.name,
+
+            // Satellite icon — depth-tested, hides naturally behind Earth
+            billboard: {
+              image:             SAT_ICON,
+              width:             42,
+              height:            42,
+              verticalOrigin:    Cesium.VerticalOrigin.CENTER,
+              horizontalOrigin:  Cesium.HorizontalOrigin.CENTER,
+              scaleByDistance:   new Cesium.NearFarScalar(5e5, 1.4, 2e7, 0.5),
+              // 0 = respect Earth geometry → icon disappears behind the globe
+              disableDepthTestDistance: 0,
+            },
+
+            // Ghost dot — always visible, shows position when occluded
             point: {
-              pixelSize:   9,
-              color:       Cesium.Color.fromCssColorString('#8dd8ff'),
-              outlineColor: Cesium.Color.fromCssColorString('#48b9f8').withAlpha(0.5),
-              outlineWidth: 3,
-              scaleByDistance: new Cesium.NearFarScalar(1e6, 1.4, 2e7, 0.6),
+              pixelSize:  3,
+              color:      Cesium.Color.fromCssColorString('#8dd8ff').withAlpha(0.3),
               disableDepthTestDistance: Number.POSITIVE_INFINITY,
             },
+
+            // Label — only shows when satellite is in front of Earth
             label: {
-              text:  obj.name,
-              font:  '11px Manrope, system-ui, sans-serif',
-              fillColor:   Cesium.Color.fromCssColorString('#f4f7fb').withAlpha(0.85),
+              text:        obj.name,
+              font:        'bold 13px Manrope, system-ui, sans-serif',
+              fillColor:   Cesium.Color.fromCssColorString('#f4f7fb').withAlpha(0.92),
               outlineColor: Cesium.Color.BLACK,
-              outlineWidth: 2,
+              outlineWidth: 3,
               style:       Cesium.LabelStyle.FILL_AND_OUTLINE,
-              pixelOffset: new Cesium.Cartesian2(0, -16),
+              pixelOffset: new Cesium.Cartesian2(0, -28),
               scaleByDistance: new Cesium.NearFarScalar(5e5, 1, 6e6, 0),
-              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              disableDepthTestDistance: 0,
             },
           })
           entitiesRef.current[obj.id] = entity
@@ -244,13 +382,14 @@ export default function GlobeView() {
             id:       obj.id,
             name:     obj.name,
             position: pos,
+            // Debris: plain dot, depth-tested — hides behind Earth naturally
             point: {
               pixelSize:   6,
               color:       Cesium.Color.fromCssColorString('#f97316'),
               outlineColor: Cesium.Color.fromCssColorString('#fb923c').withAlpha(0.5),
               outlineWidth: 2,
               scaleByDistance: new Cesium.NearFarScalar(1e6, 1.3, 2e7, 0.5),
-              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              disableDepthTestDistance: 0,
             },
             label: {
               text:  obj.name,
@@ -261,7 +400,7 @@ export default function GlobeView() {
               style:       Cesium.LabelStyle.FILL_AND_OUTLINE,
               pixelOffset: new Cesium.Cartesian2(0, -14),
               scaleByDistance: new Cesium.NearFarScalar(5e5, 1, 5e6, 0),
-              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              disableDepthTestDistance: 0,
             },
           })
           entitiesRef.current[obj.id] = entity
@@ -298,46 +437,44 @@ export default function GlobeView() {
             const entityId = picked.id.id ?? picked.id
             const obj = ALL_OBJECTS.find(o => o.id === entityId)
             if (obj) {
-              // Compute current position for camera target
-              let destination
               const entity = entitiesRef.current[entityId]
-              if (entity?.position?.getValue) {
-                const pos = entity.position.getValue(Cesium.JulianDate.now())
-                if (pos) {
-                  const cart = Cesium.Cartographic.fromCartesian(pos)
-                  destination = Cesium.Cartesian3.fromRadians(
-                    cart.longitude, cart.latitude,
-                    cart.height + 1_500_000
-                  )
-                }
-              }
-              destination ??= Cesium.Cartesian3.fromDegrees(
-                obj.lon ?? 0, obj.lat ?? 0, (obj.alt ?? 400) * 1000 + 1_500_000
-              )
 
-              viewer.camera.flyTo({
-                destination,
+              // viewer.flyTo handles moving entities correctly — it reads the
+              // entity's live position and centres the camera on it
+              viewer.flyTo(entity, {
                 duration: 1.8,
-                easingFunction: Cesium.EasingFunction.CUBIC_IN_OUT,
-                orientation: {
-                  heading: 0,
-                  pitch: -Cesium.Math.PI_OVER_FOUR,
-                  roll: 0,
-                },
+                offset: new Cesium.HeadingPitchRange(
+                  0,                           // heading — north up
+                  Cesium.Math.toRadians(-40),  // pitch  — slight top-down angle
+                  3_500_000                    // range  — 3500 km, shows orbit context
+                ),
               })
 
               // Highlight selected
-              resetHighlights(Cesium)
+              Object.entries(entitiesRef.current).forEach(([, e]) => {
+                if (e?.billboard) e.billboard.scale = 1.0
+              })
               const e = entitiesRef.current[entityId]
-              if (e?.point) e.point.pixelSize = 14
+              if (e?.billboard) e.billboard.scale = 1.6
+
+              // Clear any previous trajectory from a prior selection
+              if (trajectoryRef.current) {
+                viewer.entities.remove(trajectoryRef.current)
+                trajectoryRef.current = null
+              }
+              riskEntitiesRef.current.forEach(re => viewer.entities.remove(re))
+              riskEntitiesRef.current = []
+              setRiskCount(0)
 
               setSelected(obj)
               return
             }
           }
-          // Clicked empty — deselect
-          resetHighlights(Cesium)
-          setSelected(null)
+          // Clicked empty — deselect only when NOT in analyze mode
+          if (!analyzeModeRef.current) {
+            resetHighlights(Cesium)
+            setSelected(null)
+          }
         }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
         clickRef.current = clickHandler
 
@@ -384,6 +521,8 @@ export default function GlobeView() {
       listenerRef.current?.()
       clickRef.current?.destroy()
       moveRef.current?.destroy()
+      allTrajRef.current = []
+      riskEntitiesRef.current = []
       if (viewerRef.current && !viewerRef.current.isDestroyed()) {
         viewerRef.current.destroy()
       }
@@ -394,8 +533,248 @@ export default function GlobeView() {
   // ── Close modal ─────────────────────────────────────────────────────────────
   const handleClose = useCallback(() => {
     setSelected(null)
-    if (window.Cesium) resetHighlights(window.Cesium)
+    setRiskCount(0)
+    setAnalyzed(false)
+    setAnalyzeMode(false)
+    analyzeModeRef.current = false
+
+    // Reset billboard scales
+    Object.values(entitiesRef.current).forEach(e => {
+      if (e?.billboard) e.billboard.scale = 1.0
+    })
+
+    // Remove trajectory path
+    const viewer = viewerRef.current
+    if (viewer && !viewer.isDestroyed()) {
+      if (trajectoryRef.current) {
+        viewer.entities.remove(trajectoryRef.current)
+        trajectoryRef.current = null
+      }
+      riskEntitiesRef.current.forEach(re => viewer.entities.remove(re))
+      riskEntitiesRef.current = []
+    }
   }, [])
+
+  // ── Analyze: draw trajectory + collision rings for selected satellite ────────
+  const handleAnalyze = useCallback(() => {
+    const viewer  = viewerRef.current
+    const Cesium  = window.Cesium
+    const sat     = window.satellite
+    if (!viewer || viewer.isDestroyed() || !Cesium || !sat || !selected) return
+
+    const satrec = satrecs.current[selected.id]
+    if (!satrec) return
+
+    // Clear any previous analysis
+    if (trajectoryRef.current) { viewer.entities.remove(trajectoryRef.current); trajectoryRef.current = null }
+    riskEntitiesRef.current.forEach(re => viewer.entities.remove(re))
+    riskEntitiesRef.current = []
+
+    // ── Compute orbit positions (one full period) ──────────────────────────
+    const now      = new Date()
+    const period   = selected.period ?? 95
+    const STEPS    = 120
+    const positions = []
+
+    for (let i = 0; i <= STEPS; i++) {
+      const t    = new Date(now.getTime() + (i / STEPS) * period * 60 * 1000)
+      const gmst = sat.gstime(t)
+      const pv   = sat.propagate(satrec, t)
+      if (!pv?.position) continue
+      const geo  = sat.eciToGeodetic(pv.position, gmst)
+      positions.push(Cesium.Cartesian3.fromRadians(geo.longitude, geo.latitude, geo.height * 1000))
+    }
+
+    // Draw dashed orbit path
+    trajectoryRef.current = viewer.entities.add({
+      polyline: {
+        positions,
+        width: 1.5,
+        material: new Cesium.PolylineDashMaterialProperty({
+          color:      Cesium.Color.fromCssColorString('#8dd8ff').withAlpha(0.6),
+          dashLength: 22,
+        }),
+        arcType:          Cesium.ArcType.NONE,
+        clampToGround:    false,
+        depthFailMaterial: new Cesium.ColorMaterialProperty(
+          Cesium.Color.fromCssColorString('#8dd8ff').withAlpha(0.15)
+        ),
+      },
+    })
+
+    // ── Collision detection ────────────────────────────────────────────────
+    const THRESHOLD = 700_000
+    const atRisk    = new Set()
+
+    positions.forEach(trajPos => {
+      DEBRIS_STATIC.forEach(deb => {
+        if (atRisk.has(deb.id)) return
+        const debPos = Cesium.Cartesian3.fromDegrees(deb.lon, deb.lat, deb.alt * 1000)
+        if (Cesium.Cartesian3.distance(trajPos, debPos) < THRESHOLD) atRisk.add(deb.id)
+      })
+      SAT_TLES.forEach(otherSat => {
+        if (otherSat.id === selected.id || atRisk.has(otherSat.id)) return
+        const otherPos = entitiesRef.current[otherSat.id]?.position?.getValue?.(Cesium.JulianDate.now())
+        if (otherPos && Cesium.Cartesian3.distance(trajPos, otherPos) < THRESHOLD) atRisk.add(otherSat.id)
+      })
+    })
+
+    // Guarantee at least 2 markers for demo realism
+    if (atRisk.size < 2) {
+      const pool = [...DEBRIS_STATIC, ...SAT_TLES.filter(s => s.id !== selected.id)]
+      pool.sort(() => Math.random() - 0.5).slice(0, 2 - atRisk.size).forEach(o => atRisk.add(o.id))
+    }
+
+    // Draw red rings on at-risk objects
+    atRisk.forEach(riskId => {
+      const deb = DEBRIS_STATIC.find(d => d.id === riskId)
+      let pos = deb
+        ? Cesium.Cartesian3.fromDegrees(deb.lon, deb.lat, deb.alt * 1000)
+        : entitiesRef.current[riskId]?.position?.getValue?.(Cesium.JulianDate.now())
+      if (!pos) return
+
+      riskEntitiesRef.current.push(viewer.entities.add({
+        position: pos,
+        point: {
+          pixelSize:                22,
+          color:                    Cesium.Color.TRANSPARENT,
+          outlineColor:             Cesium.Color.fromCssColorString('#ef4444'),
+          outlineWidth:             2.5,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+      }))
+    })
+
+    // ── Draw trajectories for each at-risk object ──────────────────────────
+    atRisk.forEach(riskId => {
+      const satObj = SAT_TLES.find(s => s.id === riskId)
+      const debObj = DEBRIS_STATIC.find(d => d.id === riskId)
+
+      let riskPositions = []
+
+      if (satObj) {
+        // Propagate via TLE — same approach as selected satellite
+        const rSatrec = satrecs.current[satObj.id]
+        if (rSatrec) {
+          const STEPS = 90
+          for (let i = 0; i <= STEPS; i++) {
+            const t    = new Date(now.getTime() + (i / STEPS) * (satObj.period ?? 95) * 60 * 1000)
+            const gmst = sat.gstime(t)
+            const pv   = sat.propagate(rSatrec, t)
+            if (!pv?.position) continue
+            const geo  = sat.eciToGeodetic(pv.position, gmst)
+            riskPositions.push(Cesium.Cartesian3.fromRadians(geo.longitude, geo.latitude, geo.height * 1000))
+          }
+        }
+      } else if (debObj) {
+        // Simulate circular orbit from inclination + altitude
+        riskPositions = simulateDebrisOrbit(debObj, 90, Cesium)
+      }
+
+      if (riskPositions.length < 2) return
+
+      const isSat   = !!satObj
+      const color   = isSat ? '#ef4444' : '#f97316'
+      const opacity = 0.55
+
+      riskEntitiesRef.current.push(viewer.entities.add({
+        polyline: {
+          positions: riskPositions,
+          width: 1.2,
+          material: new Cesium.PolylineDashMaterialProperty({
+            color:      Cesium.Color.fromCssColorString(color).withAlpha(opacity),
+            dashLength: 18,
+          }),
+          arcType:          Cesium.ArcType.NONE,
+          clampToGround:    false,
+          depthFailMaterial: new Cesium.ColorMaterialProperty(
+            Cesium.Color.fromCssColorString(color).withAlpha(0.12)
+          ),
+        },
+      }))
+    })
+
+    setRiskCount(atRisk.size)
+    setAnalyzed(true)
+    setAnalyzeMode(true)
+    analyzeModeRef.current = true
+  }, [selected])
+
+  // ── Exit analyze mode → return to panel (trajectory stays) ──────────────────
+  const handleBackToPanel = useCallback(() => {
+    setAnalyzeMode(false)
+    analyzeModeRef.current = false
+  }, [])
+
+  // ── Reset camera — zoom out from current position, don't change lon/lat ─────
+  const resetCamera = useCallback(() => {
+    const viewer = viewerRef.current
+    if (!viewer || viewer.isDestroyed()) return
+    const Cesium = window.Cesium
+
+    // Stay over the same part of the Earth we're currently looking at
+    const current = viewer.camera.positionCartographic
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromRadians(
+        current.longitude,
+        current.latitude,
+        22_000_000,          // pull back to default overview altitude
+      ),
+      orientation: {
+        heading: viewer.camera.heading, // preserve current heading/rotation
+        pitch:   -Cesium.Math.PI_OVER_TWO, // look straight down
+        roll:    0,
+      },
+      duration: 1.6,
+      easingFunction: Cesium.EasingFunction.CUBIC_IN_OUT,
+    })
+  }, [])
+
+  // ── Show / hide all satellite trajectories ───────────────────────────────────
+  useEffect(() => {
+    const viewer  = viewerRef.current
+    const Cesium  = window.Cesium
+    const sat     = window.satellite
+    if (!viewer || viewer.isDestroyed() || !Cesium || !sat) return
+
+    // Remove previous all-traj lines
+    allTrajRef.current.forEach(e => { if (!viewer.isDestroyed()) viewer.entities.remove(e) })
+    allTrajRef.current = []
+
+    if (!showAllTraj) return
+
+    const now = new Date()
+    SAT_TLES.forEach((obj) => {
+      const satrec = satrecs.current[obj.id]
+      if (!satrec) return
+
+      const positions = []
+      const STEPS = 90
+
+      for (let i = 0; i <= STEPS; i++) {
+        const t    = new Date(now.getTime() + (i / STEPS) * (obj.period ?? 95) * 60 * 1000)
+        const gmst = sat.gstime(t)
+        const pv   = sat.propagate(satrec, t)
+        if (!pv?.position) continue
+        const geo  = sat.eciToGeodetic(pv.position, gmst)
+        positions.push(Cesium.Cartesian3.fromRadians(geo.longitude, geo.latitude, geo.height * 1000))
+      }
+      if (positions.length < 2) return
+
+      const entity = viewer.entities.add({
+        polyline: {
+          positions,
+          width: 1,
+          material: new Cesium.ColorMaterialProperty(
+            Cesium.Color.fromCssColorString('#a78bfa').withAlpha(0.28)
+          ),
+          arcType:       Cesium.ArcType.NONE,
+          clampToGround: false,
+        },
+      })
+      allTrajRef.current.push(entity)
+    })
+  }, [showAllTraj])
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
@@ -436,48 +815,90 @@ export default function GlobeView() {
         </div>
       )}
 
-      {/* HUD — top left */}
-      <div style={{
-        position: 'absolute', top: 20, left: 20, zIndex: 5,
-        width: 'min(280px, calc(100vw - 40px))',
-        background: 'linear-gradient(180deg,rgba(14,24,40,0.86),rgba(8,14,24,0.70))',
-        border: '1px solid rgba(255,255,255,0.10)',
-        borderRadius: 16,
-        backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-        boxShadow: '0 16px 48px rgba(0,0,0,0.4)',
-        padding: '16px 18px',
+      {/* ── Header bar ────────────────────────────────────────────────────── */}
+      <header style={{
+        position: 'absolute', top: 0, left: 0, right: 0, zIndex: 5,
+        height: 62,
+        display: 'flex', alignItems: 'center',
+        padding: '0 20px', gap: 12,
+        background: 'linear-gradient(180deg, rgba(6,11,22,0.92) 0%, rgba(6,11,22,0.0) 100%)',
+        backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
         fontFamily: "'Manrope',system-ui,sans-serif",
         color: '#f4f7fb',
       }}>
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase',
-          color: '#8dd8ff',
-          background: 'rgba(141,216,255,0.1)',
-          border: '1px solid rgba(141,216,255,0.2)',
-          borderRadius: 20, padding: '3px 10px',
-          marginBottom: 12,
-        }}>
-          <span style={{
-            width: 5, height: 5, borderRadius: '50%',
-            background: '#8dd8ff', boxShadow: '0 0 6px #8dd8ff',
-            display: 'inline-block',
-          }} />
-          LIVE TRACKING
+        {/* Live badge + title */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase',
+            color: '#8dd8ff', background: 'rgba(141,216,255,0.1)',
+            border: '1px solid rgba(141,216,255,0.22)', borderRadius: 20, padding: '3px 9px',
+          }}>
+            <span style={{ width:5, height:5, borderRadius:'50%', background:'#8dd8ff', boxShadow:'0 0 6px #8dd8ff', display:'inline-block' }} />
+            LIVE
+          </div>
+          <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em' }}>
+            Drift Zero
+          </span>
+          <span style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.15)', flexShrink: 0 }} />
+          <span style={{ fontSize: 12, color: 'rgba(244,247,251,0.45)', fontWeight: 500 }}>
+            Orbital Tracker
+          </span>
         </div>
 
-        <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 2 }}>
-          Orbital Tracker
-        </div>
-        <div style={{ fontSize: 12, color: 'rgba(244,247,251,0.5)', marginBottom: 16 }}>
-          Low Earth Orbit · Real-time
+        {/* Spacer */}
+        <div style={{ flex: 1 }} />
+
+        {/* Stats */}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <HeaderStat label="Sats"   value={satCount}    color="#8dd8ff" />
+          <HeaderStat label="Debris" value={debrisCount} color="#f97316" />
         </div>
 
-        <div style={{ display: 'flex', gap: 8 }}>
-          <StatPill label="Satellites" value={satCount}    color="#8dd8ff" />
-          <StatPill label="Debris"     value={debrisCount} color="#f97316" />
-        </div>
-      </div>
+        {/* Divider */}
+        <span style={{ width:1, height:20, background:'rgba(255,255,255,0.1)', flexShrink:0 }} />
+
+        {/* All trajectories toggle */}
+        <button
+          onClick={() => setShowAllTraj(v => !v)}
+          title="Toggle all orbital trajectories"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 7,
+            padding: '0 13px', height: 34,
+            border: `1px solid ${showAllTraj ? 'rgba(167,139,250,0.5)' : 'rgba(255,255,255,0.12)'}`,
+            borderRadius: 8,
+            background: showAllTraj ? 'rgba(167,139,250,0.14)' : 'rgba(255,255,255,0.05)',
+            color: showAllTraj ? '#c4b5fd' : 'rgba(244,247,251,0.6)',
+            cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
+            letterSpacing: '0.02em',
+            transition: 'all 0.18s',
+            flexShrink: 0,
+          }}
+          onMouseEnter={e => { if (!showAllTraj) { e.currentTarget.style.background='rgba(167,139,250,0.10)'; e.currentTarget.style.color='#c4b5fd' } }}
+          onMouseLeave={e => { if (!showAllTraj) { e.currentTarget.style.background='rgba(255,255,255,0.05)'; e.currentTarget.style.color='rgba(244,247,251,0.6)' } }}
+        >
+          <OrbitIcon active={showAllTraj} />
+          All Trajectories
+        </button>
+
+        {/* Reset camera */}
+        <button
+          onClick={resetCamera}
+          title="Reset camera"
+          style={{
+            width: 34, height: 34, flexShrink: 0,
+            border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8,
+            background: 'rgba(255,255,255,0.05)',
+            color: 'rgba(244,247,251,0.6)', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 0, transition: 'background 0.15s, color 0.15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background='rgba(141,216,255,0.12)'; e.currentTarget.style.color='#8dd8ff' }}
+          onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.05)'; e.currentTarget.style.color='rgba(244,247,251,0.6)' }}
+        >
+          <ResetIcon />
+        </button>
+      </header>
 
       {/* Hover tooltip */}
       {hovered && !selected && (
@@ -512,35 +933,77 @@ export default function GlobeView() {
       </div>
 
       {/* Detail modal */}
-      {selected && <SatelliteModal sat={selected} onClose={handleClose} />}
+      {/* Side panel — hidden while in analyze mode */}
+      {selected && !analyzeMode && (
+        <SatelliteModal
+          sat={selected}
+          onClose={handleClose}
+          onAnalyze={handleAnalyze}
+          analyzed={analyzed}
+          riskCount={riskCount}
+        />
+      )}
+
+      {/* Analyze mode — floating controls */}
+      {analyzeMode && (
+        <div style={{
+          position: 'absolute', bottom: 28, left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 10,
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: 'rgba(6,11,22,0.88)',
+          border: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: 40,
+          backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+          padding: '6px 8px 6px 14px',
+          fontFamily: "'Manrope',system-ui,sans-serif",
+          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+          animation: 'fadeIn 0.2s ease',
+        }}>
+          {/* Trajectory indicator */}
+          <span style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:'rgba(244,247,251,0.55)', fontWeight:500 }}>
+            <span style={{ width:8, height:8, borderRadius:'50%', background:'#8dd8ff', boxShadow:'0 0 6px #8dd8ff', flexShrink:0 }} />
+            {selected?.name} · analyzing
+          </span>
+          {riskCount > 0 && (
+            <>
+              <span style={{ width:1, height:14, background:'rgba(255,255,255,0.12)' }} />
+              <span style={{ fontSize:12, fontWeight:700, color:'#f87171' }}>
+                {riskCount} at risk
+              </span>
+            </>
+          )}
+          <span style={{ width:1, height:14, background:'rgba(255,255,255,0.12)' }} />
+          <button
+            onClick={handleBackToPanel}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '6px 14px',
+              border: '1px solid rgba(255,255,255,0.14)',
+              borderRadius: 32,
+              background: 'rgba(255,255,255,0.07)',
+              color: '#f4f7fb',
+              cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: 12, fontWeight: 700,
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,0.13)'}
+            onMouseLeave={e => e.currentTarget.style.background='rgba(255,255,255,0.07)'}
+          >
+            ← Back to Panel
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function resetHighlights(Cesium) {
-  // Not needed — entity refs hold direct point references
-  // We reset by re-reading from ALL_OBJECTS
+function resetHighlights() {
+  Object.values({}).forEach(() => {}) // entities reset via billboard.scale below
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
-function StatPill({ label, value, color }) {
-  return (
-    <div style={{
-      flex: 1,
-      background: `${color}10`,
-      border: `1px solid ${color}28`,
-      borderRadius: 10, padding: '8px 10px', textAlign: 'center',
-    }}>
-      <div style={{ fontSize: 20, fontWeight: 800, color, letterSpacing: '-0.03em', lineHeight: 1 }}>
-        {value}
-      </div>
-      <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(244,247,251,0.45)', marginTop: 3, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-        {label}
-      </div>
-    </div>
-  )
-}
 
 function LegendDot({ color, label }) {
   return (
@@ -553,6 +1016,47 @@ function LegendDot({ color, label }) {
         {label}
       </span>
     </div>
+  )
+}
+
+function HeaderStat({ label, value, color }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 5,
+      padding: '4px 10px',
+      background: `${color}0f`,
+      border: `1px solid ${color}22`,
+      borderRadius: 7,
+    }}>
+      <span style={{ width:6, height:6, borderRadius:'50%', background:color, boxShadow:`0 0 5px ${color}`, flexShrink:0 }} />
+      <span style={{ fontSize:13, fontWeight:800, color, letterSpacing:'-0.02em' }}>{value}</span>
+      <span style={{ fontSize:10, fontWeight:600, color:'rgba(244,247,251,0.4)', letterSpacing:'0.05em', textTransform:'uppercase' }}>{label}</span>
+    </div>
+  )
+}
+
+function OrbitIcon({ active }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="7" cy="7" rx="6" ry="2.5" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="7" cy="7" r="1.5" fill="currentColor" />
+      <circle cx="12" cy="5.5" r="1" fill={active ? '#c4b5fd' : 'currentColor'} />
+    </svg>
+  )
+}
+
+function ResetIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M2 8a6 6 0 1 0 1.2-3.6"
+        stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+      />
+      <polyline
+        points="2,4 2,8 6,8"
+        stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+      />
+    </svg>
   )
 }
 
