@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import SatelliteModal from './SatelliteModal'
+import { satStore } from '../satStore'
 
 // ── Token ─────────────────────────────────────────────────────────────────────
 // Free token from https://ion.cesium.com — set VITE_CESIUM_TOKEN in root .env
@@ -467,6 +467,7 @@ export default function GlobeView() {
               setRiskCount(0)
 
               setSelected(obj)
+              satStore.select(obj)
               return
             }
           }
@@ -474,6 +475,7 @@ export default function GlobeView() {
           if (!analyzeModeRef.current) {
             resetHighlights(Cesium)
             setSelected(null)
+            satStore.close()
           }
         }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
         clickRef.current = clickHandler
@@ -530,6 +532,12 @@ export default function GlobeView() {
     }
   }, [])
 
+  // ── Register callbacks in satStore so App.jsx can trigger them ──────────────
+  useEffect(() => {
+    satStore.onAnalyze = () => handleAnalyze()
+    satStore.onClose   = () => handleClose()
+  })
+
   // ── Close modal ─────────────────────────────────────────────────────────────
   const handleClose = useCallback(() => {
     setSelected(null)
@@ -537,6 +545,7 @@ export default function GlobeView() {
     setAnalyzed(false)
     setAnalyzeMode(false)
     analyzeModeRef.current = false
+    satStore.close()
 
     // Reset billboard scales
     Object.values(entitiesRef.current).forEach(e => {
@@ -697,6 +706,7 @@ export default function GlobeView() {
     setRiskCount(atRisk.size)
     setAnalyzed(true)
     setAnalyzeMode(true)
+    satStore.setAnalyzed(atRisk.size)
     analyzeModeRef.current = true
   }, [selected])
 
@@ -855,27 +865,33 @@ export default function GlobeView() {
           <HeaderStat label="Debris" value={debrisCount} color="#f97316" />
         </div>
 
-        {/* Divider */}
-        <span style={{ width:1, height:20, background:'rgba(255,255,255,0.1)', flexShrink:0 }} />
+      </header>
 
+      {/* ── Globe controls — bottom left ──────────────────────────────────── */}
+      <div style={{
+        position: 'absolute', bottom: 20, left: 20, zIndex: 5,
+        display: 'flex', alignItems: 'center', gap: 8,
+        fontFamily: "'Manrope',system-ui,sans-serif",
+      }}>
         {/* All trajectories toggle */}
         <button
           onClick={() => setShowAllTraj(v => !v)}
           title="Toggle all orbital trajectories"
           style={{
             display: 'flex', alignItems: 'center', gap: 7,
-            padding: '0 13px', height: 34,
-            border: `1px solid ${showAllTraj ? 'rgba(167,139,250,0.5)' : 'rgba(255,255,255,0.12)'}`,
+            padding: '0 14px', height: 36,
+            border: `1px solid ${showAllTraj ? 'rgba(167,139,250,0.7)' : 'rgba(255,255,255,0.28)'}`,
             borderRadius: 8,
-            background: showAllTraj ? 'rgba(167,139,250,0.14)' : 'rgba(255,255,255,0.05)',
-            color: showAllTraj ? '#c4b5fd' : 'rgba(244,247,251,0.6)',
-            cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
+            background: showAllTraj ? 'rgba(167,139,250,0.22)' : 'rgba(10,16,30,0.82)',
+            color: showAllTraj ? '#c4b5fd' : 'rgba(244,247,251,0.88)',
+            cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit',
             letterSpacing: '0.02em',
+            backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
             transition: 'all 0.18s',
-            flexShrink: 0,
           }}
-          onMouseEnter={e => { if (!showAllTraj) { e.currentTarget.style.background='rgba(167,139,250,0.10)'; e.currentTarget.style.color='#c4b5fd' } }}
-          onMouseLeave={e => { if (!showAllTraj) { e.currentTarget.style.background='rgba(255,255,255,0.05)'; e.currentTarget.style.color='rgba(244,247,251,0.6)' } }}
+          onMouseEnter={e => { if (!showAllTraj) { e.currentTarget.style.background='rgba(167,139,250,0.16)'; e.currentTarget.style.color='#c4b5fd'; e.currentTarget.style.borderColor='rgba(167,139,250,0.5)' } }}
+          onMouseLeave={e => { if (!showAllTraj) { e.currentTarget.style.background='rgba(10,16,30,0.82)'; e.currentTarget.style.color='rgba(244,247,251,0.88)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.28)' } }}
         >
           <OrbitIcon active={showAllTraj} />
           All Trajectories
@@ -886,19 +902,21 @@ export default function GlobeView() {
           onClick={resetCamera}
           title="Reset camera"
           style={{
-            width: 34, height: 34, flexShrink: 0,
-            border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8,
-            background: 'rgba(255,255,255,0.05)',
-            color: 'rgba(244,247,251,0.6)', cursor: 'pointer',
+            width: 36, height: 36,
+            border: '1px solid rgba(255,255,255,0.28)', borderRadius: 8,
+            background: 'rgba(10,16,30,0.82)',
+            backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
+            color: 'rgba(244,247,251,0.88)', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: 0, transition: 'background 0.15s, color 0.15s',
+            padding: 0, transition: 'background 0.15s, color 0.15s, border-color 0.15s',
           }}
-          onMouseEnter={e => { e.currentTarget.style.background='rgba(141,216,255,0.12)'; e.currentTarget.style.color='#8dd8ff' }}
-          onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.05)'; e.currentTarget.style.color='rgba(244,247,251,0.6)' }}
+          onMouseEnter={e => { e.currentTarget.style.background='rgba(141,216,255,0.18)'; e.currentTarget.style.color='#8dd8ff'; e.currentTarget.style.borderColor='rgba(141,216,255,0.5)' }}
+          onMouseLeave={e => { e.currentTarget.style.background='rgba(10,16,30,0.82)'; e.currentTarget.style.color='rgba(244,247,251,0.88)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.28)' }}
         >
           <ResetIcon />
         </button>
-      </header>
+      </div>
 
       {/* Hover tooltip */}
       {hovered && !selected && (
@@ -931,18 +949,6 @@ export default function GlobeView() {
         <LegendDot color="#8dd8ff" label="Active Satellite" />
         <LegendDot color="#f97316" label="Debris"           />
       </div>
-
-      {/* Detail modal */}
-      {/* Side panel — hidden while in analyze mode */}
-      {selected && !analyzeMode && (
-        <SatelliteModal
-          sat={selected}
-          onClose={handleClose}
-          onAnalyze={handleAnalyze}
-          analyzed={analyzed}
-          riskCount={riskCount}
-        />
-      )}
 
       {/* Analyze mode — floating controls */}
       {analyzeMode && (
