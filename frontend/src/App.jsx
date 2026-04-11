@@ -1,9 +1,11 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import StatsBar from './components/dashboard/StatsBar'
 import AlertQueue from './components/dashboard/AlertQueue'
 import ManeuverPanel from './components/dashboard/ManeuverPanel'
 import NaturalLanguageAlert from './components/dashboard/NaturalLanguageAlert'
 import CascadeAnalysis from './components/dashboard/CascadeAnalysis'
+import SatelliteModal from './components/SatelliteModal'
+import { satStore } from './satStore'
 
 const PANEL_MIN = 15   // % of screen width
 const PANEL_MAX = 55
@@ -15,6 +17,28 @@ export default function DashboardOverlay() {
   const [collapsed, setCollapsed] = useState(null) // null | 'panels'
   const [isDragging, setIsDragging] = useState(false)
   const [dividerHover, setDividerHover] = useState(false)
+  const tabDragMoved = useRef(false) // tracks whether tab mousedown became a drag
+
+  // ── Satellite selection from GlobeView ────────────────────────────────────
+  const [selectedSat, setSelectedSat] = useState(null)
+  const [satAnalyzed, setSatAnalyzed] = useState(false)
+  const [satRiskCount, setSatRiskCount] = useState(0)
+
+  useEffect(() => {
+    return satStore.subscribe(({ sat, analyzed, riskCount }) => {
+      setSelectedSat(sat)
+      setSatAnalyzed(analyzed)
+      setSatRiskCount(riskCount)
+    })
+  }, [])
+
+  const handleSatClose = useCallback(() => {
+    satStore.onClose?.()
+  }, [])
+
+  const handleSatAnalyze = useCallback(() => {
+    satStore.onAnalyze?.()
+  }, [])
 
   // ── Drag-to-resize ──────────────────────────────────────────────────────────
   const onDividerMouseDown = useCallback((e) => {
@@ -26,6 +50,7 @@ export default function DashboardOverlay() {
   useEffect(() => {
     if (!isDragging) return
     const onMouseMove = (e) => {
+      tabDragMoved.current = true
       const pct = ((window.innerWidth - e.clientX) / window.innerWidth) * 100
       setPanelPct(Math.min(PANEL_MAX, Math.max(PANEL_MIN, pct)))
     }
@@ -94,21 +119,38 @@ export default function DashboardOverlay() {
           display: 'flex',
           flexDirection: 'column',
         }}>
-          <AlertQueue
-            selected={selectedConjunction}
-            onSelect={setSelectedConjunction}
-          />
-          {selectedConjunction && (
+          {selectedSat ? (
+            /* ── Satellite selected: show satellite info panel ── */
+            /* key forces remount + re-animation on each new satellite */
+            <SatelliteModal
+              key={selectedSat.id}
+              sat={selectedSat}
+              onClose={handleSatClose}
+              onAnalyze={handleSatAnalyze}
+              analyzed={satAnalyzed}
+              riskCount={satRiskCount}
+              inline
+            />
+          ) : (
+            /* ── Default: conjunction queue + detail panels ── */
             <>
-              <NaturalLanguageAlert conjunction={selectedConjunction} />
-              <ManeuverPanel conjunction={selectedConjunction} />
-              <CascadeAnalysis conjunction={selectedConjunction} />
+              <AlertQueue
+                selected={selectedConjunction}
+                onSelect={setSelectedConjunction}
+              />
+              {selectedConjunction && (
+                <>
+                  <NaturalLanguageAlert conjunction={selectedConjunction} />
+                  <ManeuverPanel conjunction={selectedConjunction} />
+                  <CascadeAnalysis conjunction={selectedConjunction} />
+                </>
+              )}
             </>
           )}
         </div>
       </div>
 
-      {/* ── Divider / toggle tab ─────────────────────────────────────────────── */}
+      {/* ── Divider — drag strip + always-visible collapse tab ───────────────── */}
       <div
         onMouseDown={onDividerMouseDown}
         onMouseEnter={() => setDividerHover(true)}
@@ -118,71 +160,63 @@ export default function DashboardOverlay() {
           top: 44,
           bottom: 0,
           right: dividerRight,
-          width: collapsed === 'panels' ? 20 : 6,
+          width: 6,
           zIndex: 11,
-          cursor: collapsed === 'panels' ? 'pointer' : 'col-resize',
+          cursor: 'col-resize',
           transition,
           pointerEvents: 'auto',
           background: isDragging
             ? 'rgba(34,211,238,0.3)'
             : dividerHover
               ? 'rgba(34,211,238,0.12)'
-              : 'rgba(255,255,255,0.04)',
-          borderLeft: '1px solid rgba(255,255,255,0.06)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 6,
+              : 'transparent',
         }}
       >
-        {/* Collapse / expand button */}
+        {/* Always-visible collapse/expand tab */}
         <button
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={toggleCollapse}
+          onMouseDown={(e) => {
+            e.stopPropagation()
+            tabDragMoved.current = false
+            // Start the drag — if mouse never moves, we treat it as a click
+            setIsDragging(true)
+            setCollapsed(null)
+          }}
+          onClick={(e) => {
+            // Only toggle if the mousedown didn't turn into a real drag
+            if (!tabDragMoved.current) toggleCollapse()
+          }}
           style={{
-            width: 18,
-            height: 18,
-            borderRadius: 3,
-            background: dividerHover || collapsed === 'panels'
-              ? 'rgba(34,211,238,0.15)'
-              : 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            color: '#94a3b8',
+            position: 'absolute',
+            top: '50%',
+            left: '-14px',
+            transform: 'translateY(-50%)',
+            width: 20,
+            height: 52,
+            borderRadius: '6px 0 0 6px',
+            background: dividerHover || isDragging
+              ? 'rgba(34,211,238,0.18)'
+              : 'rgba(15,22,40,0.92)',
+            border: '1px solid rgba(255,255,255,0.18)',
+            borderRight: 'none',
+            color: dividerHover ? '#22d3ee' : '#94a3b8',
             cursor: 'pointer',
-            fontSize: 13,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            lineHeight: 1,
             padding: 0,
-            opacity: dividerHover || collapsed === 'panels' ? 1 : 0,
-            transition: 'opacity 0.15s',
+            boxShadow: '-3px 0 12px rgba(0,0,0,0.4)',
+            transition: 'background 0.15s, color 0.15s',
           }}
           title={collapsed === 'panels' ? 'Expand panels' : 'Collapse panels'}
         >
-          {collapsed === 'panels' ? '‹' : '›'}
+          <svg width="10" height="18" viewBox="0 0 10 18" fill="none">
+            {collapsed === 'panels' ? (
+              <polyline points="2,2 8,9 2,16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            ) : (
+              <polyline points="8,2 2,9 8,16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            )}
+          </svg>
         </button>
-
-        {/* Drag handle dots — visible on hover */}
-        {collapsed !== 'panels' && (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 3,
-            opacity: dividerHover ? 0.6 : 0.2,
-            transition: 'opacity 0.15s',
-          }}>
-            {[0,1,2,3,4].map(i => (
-              <div key={i} style={{
-                width: 3,
-                height: 3,
-                borderRadius: '50%',
-                background: '#94a3b8',
-              }} />
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Cursor style during drag */}

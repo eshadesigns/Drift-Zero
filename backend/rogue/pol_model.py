@@ -1,43 +1,38 @@
+import math
 import numpy as np
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 @dataclass
 class SatelliteBaseline:
     norad_id: int
-    cluster_id: Optional[int] = None
-    n_obs: int = 0
-    last_updated: Optional[datetime] = None
-    # EWMA stats per feature
+    cluster_id: int = 0
     means: dict = field(default_factory=dict)
-    vars_: dict = field(default_factory=dict)
-    # Maneuver cadence
-    maneuver_count_30d: float = 0.0
-    mean_maneuver_dv: float = 0.0
-    # Orbital regime
-    mean_motion_mean: float = 0.0
-    mean_motion_var: float = 0.0
+    stds: dict = field(default_factory=dict)
+    n: int = 0
+    m2: dict = field(default_factory=dict, repr=False)
 
-    ALPHA = 0.05  # EWMA decay
-
-    def update(self, features: dict):
+    def update(self, features: dict) -> None:
+        self.n += 1
         for k, v in features.items():
-            if not isinstance(v, (int, float)):
-                continue  # skip non-numeric fields (epoch datetime, etc.)
+            if not isinstance(v, (int, float)) or math.isnan(float(v)):
+                continue
+            v = float(v)
             if k not in self.means:
                 self.means[k] = v
-                self.vars_[k] = 0.0
+                self.m2[k] = 0.0
+                self.stds[k] = 0.0
             else:
-                old_mean = self.means[k]
-                self.means[k] = self.ALPHA * v + (1 - self.ALPHA) * old_mean
-                self.vars_[k] = (self.ALPHA * (v - self.means[k])**2
-                                 + (1 - self.ALPHA) * self.vars_[k])
-        self.n_obs += 1
-        self.last_updated = datetime.now(timezone.utc)
+                delta = v - self.means[k]
+                self.means[k] += delta / self.n
+                delta2 = v - self.means[k]
+                self.m2[k] += delta * delta2
+                if self.n > 1:
+                    self.stds[k] = math.sqrt(self.m2[k] / (self.n - 1))
 
-    def zscore(self, feature: str, value: float) -> float:
-        std = np.sqrt(self.vars_.get(feature, 1.0))
-        if std < 1e-6:
+    def zscore(self, key: str, value: float) -> float:
+        std = self.stds.get(key, 0.0)
+        if std < 1e-9:
             return 0.0
-        return abs(value - self.means.get(feature, value)) / std
+        return abs(float(value) - self.means.get(key, float(value))) / std

@@ -1,5 +1,10 @@
 .env
 drift_zero_spec_v4.pdf
+venv/
+/frontend/node_modules
+/frontend/dist
+.env
+drift_zero_spec_v4.pdf
 
 node_modules/
 __pycache__/
