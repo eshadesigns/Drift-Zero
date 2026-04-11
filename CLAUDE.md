@@ -1,83 +1,162 @@
-# Drift Zero — Claude Code Context
+# CLAUDE.md
 
-## Project
-Space Domain Intelligence Platform. SCI Hackathon 2026.
-Stack: React 19 + Vite 8, CesiumJS via CDN, satellite.js via CDN, no npm Cesium.
+This file provides guidance to Claude Code when working with code in this repository.
 
-## Repo layout
-```
-frontend/          ← all frontend code, run `npm run dev` from HERE (not root)
+## Project Overview
+
+**Drift Zero** is a space domain intelligence platform built for SCI Hackathon 2026 (SpaceTech + DefenseTech tracks, Problem 16 BOXMICA). It has two modes:
+- **Shield** — real-time collision avoidance: conjunction detection, collision probability, maneuver cost analysis, fleet cascade impact
+- **Rogue** — adversarial satellite classification: pattern-of-life modeling, anomaly detection, intent classification
+
+Two layers:
+- **`frontend/`** — React + Vite dashboard with CesiumJS 3D globe
+
+frontend/
   src/
-    main.jsx       ← entry point — GlobeView OUTSIDE StrictMode, DashboardOverlay inside
-    App.jsx        ← DashboardOverlay, absolute-positioned panels overlay on globe
-    index.css      ← minimal reset, #root is 100vw/100vh
+    main.jsx       ← entry point — GlobeView OUTSIDE StrictMode
     components/
-      GlobeView.jsx        ← Kushagra's — DO NOT MODIFY
-      SatelliteModal.jsx   ← Kushagra's — DO NOT MODIFY
-      dashboard/
-        StatsBar.jsx          ← Madhu
-        AlertQueue.jsx        ← Madhu
-        NaturalLanguageAlert.jsx ← Madhu
-        ManeuverPanel.jsx     ← Madhu
-        CascadeAnalysis.jsx   ← Madhu
+      GlobeView.jsx        ← Kushagra — DO NOT MODIFY
+      SatelliteModal.jsx   ← Kushagra — DO NOT MODIFY
+      dashboard/           ← Madhu
     data/
-      mockData.js    ← realistic orbital mock data (NASA CARA / SpaceX / ESA)
-pipeline/            ← Python TLE ingestion scripts
-backend/             ← separate backend
-```
+      mockData.js
 
-## Critical rules
+- **`backend/`** — Python orbital mechanics pipeline, Databricks integration, FastAPI, Claude API alerts
 
-### Never touch GlobeView.jsx or SatelliteModal.jsx
-Kushagra owns these. Any change risks breaking the globe. If a feature needs globe interaction, coordinate with Kushagra first.
+---
 
-### GlobeView must stay OUTSIDE React StrictMode
-StrictMode double-mounts components. Cesium viewer init runs twice on same container = crash.
-`main.jsx` structure must stay:
-```jsx
-<div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
-  <GlobeView />          {/* outside StrictMode — intentional */}
-  <StrictMode>
-    <DashboardOverlay />
-  </StrictMode>
-</div>
-```
+## Frontend Commands
 
-### Dashboard panels are overlays, not layout children
-All dashboard panels use `position: absolute` on top of the full-screen globe.
-Do NOT wrap GlobeView in a flex container or change its dimensions.
+All commands run from `frontend/`:
 
-### npm must run from frontend/
-There is no `package.json` at repo root. Always:
 ```bash
-cd frontend
-npm run dev
+npm install       # install dependencies
+npm run dev       # start dev server (localhost:5173)
+npm run build     # production build
+npm run lint      # run ESLint
 ```
 
-### SSL on this network
-Git pull requires: `git config http.sslVerify false` (already set globally).
-This is a known network/proxy issue — not a code problem.
+## Frontend Architecture
 
-## Styling
-Pure inline styles throughout dashboard components — no Tailwind, no CSS modules.
-Color palette:
-- Background: `rgba(3, 7, 18, 0.92)`
-- Border: `rgba(255,255,255,0.07)`
-- Text primary: `#e2e8f0`
-- Text muted: `#94a3b8`
-- Text dim: `#475569`
-- Cyan accent: `#22d3ee`
-- Critical: `#f87171`
-- High: `#fb923c`
-- Medium: `#fbbf24`
-- Low: `#94a3b8`
+**Stack:** React 19, Vite 8, Tailwind CSS v4, Cesium/Resium, Axios
 
-## Team split
-- **Madhu**: App.jsx, StatsBar, AlertQueue, ManeuverPanel, NaturalLanguageAlert, CascadeAnalysis, mockData.js
-- **Kushagra**: GlobeView.jsx, SatelliteModal.jsx, globe rendering/interaction
-- **Others**: backend, pipeline
+**Dashboard components** (`frontend/src/components/dashboard/`):
+- `StatsBar` — fleet KPIs
+- `AlertQueue` — conjunction events ranked by risk score
+- `NaturalLanguageAlert` — Claude API plain-English summaries (executive vs operator audience)
+- `ManeuverPanel` — three maneuver options with deltaV, fuel cost, USD cost, lifespan impact
+- `CascadeAnalysis` — downstream conjunction risks from a chosen maneuver
 
-## Branches
-- `main` — working base, deploy target
-- `feat/globeview` — Kushagra's globe work
-- `backend` — backend team
+**Mock data:** `frontend/src/data/mockData.js` — realistic CDM-style records, maneuver options, cascade risks, operator profiles. Backend will replace this.
+
+**Risk thresholds** (NASA CARA):
+- Green: < 1:10,000
+- Yellow: < 1:1,000
+- Red: ≥ 1:1,000
+- Industry maneuver threshold: 1:10,000
+
+---
+
+## Backend Architecture
+
+**Stack:** Python, `sgp4`, `numpy`, `scipy`, `requests`, `fastapi`, `databricks-sdk`, `anthropic`, `python-dotenv`
+
+**Data source:** Space-Track.org — auth confirmed working. Credentials in `.env` (never commit).
+
+**Module build order:**
+
+### `backend/shield/propagate.py`
+Turns Space-Track GP records into position/velocity vectors.
+- Input: dict with `TLE_LINE1`, `TLE_LINE2`, `OBJECT_NAME`, `NORAD_CAT_ID`, `EPOCH`
+- Builds `Satrec` via `sgp4.api.Satrec.twoline2rv`
+- Two functions: `propagate_at(sat, datetime)` → single point; `propagate_window(sat, t_start, hours, step_s)` → list of (datetime, r, v)
+- Returns numpy arrays in TEME frame (km, km/s)
+- SGP4 error code != 0 → skip silently
+- Verification: ISS propagates to ~420km altitude
+
+### `backend/shield/screen.py`
+Filters ~1000-2000 objects down to candidate conjunction pairs cheaply.
+- Input: list of parsed GP records
+- Filter by altitude band overlap (~50km tolerance) and inclination similarity
+- Output: list of (obj_a, obj_b) pairs worth running TCA on
+- Verification: output is a few hundred pairs, not 0 or millions
+
+### `backend/shield/tca.py`
+Finds Time of Closest Approach and miss distance for a pair.
+- Coarse scan: propagate both satellites at 60s steps over 24 hours, compute distance at each step
+- Fine search: bisection refinement around the coarse minimum
+- Output: `tca_utc`, `miss_distance_km`, `relative_velocity_km_s`
+- Verification: miss distances are physically plausible (not negative, not >50,000 km)
+
+### `backend/shield/probability.py`
+Computes collision probability using Chan/Alfano 2D projection method.
+- Input: miss distance, relative velocity, position uncertainty (hardcoded defaults: ~100m radial, ~500m along-track)
+- Output: `collision_probability` (float 0–1)
+- Verification: Pc for 10km miss ≈ negligible; Pc for 0.1km miss ≈ non-trivial
+
+### `backend/shield/main.py`
+Orchestrates the full pipeline.
+- Fetches TLEs from Space-Track (active satellites + debris)
+- Runs screen → tca → probability pipeline
+- Computes `risk_score` (0–100 composite of Pc, miss distance, object type, relative velocity)
+- Computes `do_nothing_confidence` (float passed in from operator behavior data)
+- Writes output to Databricks Delta table
+- Exposes `GET /conjunctions?min_risk=50&limit=20` via FastAPI
+
+---
+
+## Output JSON Schema (per conjunction event)
+
+```json
+{
+  "event_id": "uuid",
+  "timestamp_utc": "ISO8601",
+  "primary": { "norad_id": int, "name": str, "tle_epoch": "ISO8601" },
+  "secondary": { "norad_id": int, "name": str, "tle_epoch": "ISO8601" },
+  "tca_utc": "ISO8601",
+  "miss_distance_km": float,
+  "relative_velocity_km_s": float,
+  "collision_probability": float,
+  "risk_score": float,
+  "do_nothing_confidence": float,
+  "data_source": "spacetrack",
+  "data_age_minutes": float
+}
+```
+
+---
+
+## Environment Variables (`.env` — never commit)
+
+```
+SPACETRACK_EMAIL=...
+SPACETRACK_PASSWORD=...
+ANTHROPIC_API_KEY=...
+DATABRICKS_HOST=...
+DATABRICKS_TOKEN=...
+```
+
+---
+
+## Key Design Patterns
+
+- NORAD CAT ID is the primary key across all space data
+- All conjunction IDs follow `CDM-YYYY-MMDD-NNN` format
+- `naturalLanguageAlerts` have `audienceLevel`: `"executive"` or `"operator"`
+- TEME frame used throughout backend — frontend handles coordinate conversion for globe rendering
+- Data age is tagged on every TLE record and surfaced in the UI
+- Solar weather (NOAA SWPC) is used to flag low-confidence conjunctions during high-Kp periods
+- - GlobeView.jsx must stay outside React StrictMode — double mount crashes Cesium
+- All dashboard panels use position: absolute overlays on top of the globe
+- Pure inline styles in dashboard components, no Tailwind
+- npm run dev must be run from frontend/, not repo root
+
+
+
+
+## Team
+- Abhay: backend/shield — conjunction detection pipeline
+- Taher/Nikhil: Databricks pipeline, TLE ingestion, ML
+- Madhu: dashboard UI components
+- Kushagra: GlobeView, globe rendering — DO NOT MODIFY these files
+- Esha: Rogue, Anomaly detection
