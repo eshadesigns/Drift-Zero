@@ -1,16 +1,56 @@
-import math
 import numpy as np
 from sklearn.ensemble import IsolationForest
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
-from rogue.pol_model import SatelliteBaseline
+from backend.rogue.pol_model import SatelliteBaseline
 
 FEATURE_KEYS = [
     'delta_mean_motion', 'delta_eccentricity', 'delta_inclination',
-    'delta_bstar', 'delta_v_proxy', 'time_gap_hours',
-    'solar_f107', 'kp_index'
+    'delta_raan', 'delta_bstar', 'delta_v_proxy', 'time_gap_hours',
+    'solar_f107', 'kp_index',
 ]
+
+# Rule-based intent labels (Rogue pattern-of-life / threat heuristics)
+INTENT_AGGRESSIVE_PROXIMITY = 'AGGRESSIVE_PROXIMITY'
+INTENT_INSPECTION = 'INSPECTION'
+INTENT_EVASIVE = 'EVASIVE'
+INTENT_SHADOWING = 'SHADOWING'
+INTENT_STATION_KEEPING = 'STATION_KEEPING'
+
+
+def infer_intent_label(
+    *,
+    anomalous_features: list[str],
+    composite_score: float,
+    proximity_flag: bool,
+    features: dict,
+) -> str:
+    """
+    Classify intent from feature anomalies, composite score, and CDM proximity.
+    Rules are evaluated in priority order (first match wins).
+    """
+    af = set(anomalous_features)
+    dv = float(features.get('delta_v_proxy', 0.0) or 0.0)
+
+    if proximity_flag and dv > 50.0:
+        return INTENT_AGGRESSIVE_PROXIMITY
+    if proximity_flag and 'delta_raan' in af:
+        return INTENT_INSPECTION
+    if (
+        proximity_flag
+        and composite_score >= 0.52
+        and ('delta_v_proxy' in af or dv > 15.0)
+    ):
+        return INTENT_EVASIVE
+    if proximity_flag and composite_score >= 0.60:
+        return INTENT_SHADOWING
+    if proximity_flag:
+        return INTENT_SHADOWING
+    if af & {'delta_mean_motion', 'delta_eccentricity', 'delta_inclination',
+              'delta_raan', 'delta_bstar', 'delta_v_proxy'}:
+        return INTENT_STATION_KEEPING
+    return INTENT_STATION_KEEPING
 
 @dataclass
 class AnomalyEvent:
@@ -22,6 +62,7 @@ class AnomalyEvent:
     iso_score: float
     proximity_flag: bool
     anomalous_features: list[str]
+    intent_label: str      # STATION_KEEPING | EVASIVE | INSPECTION | SHADOWING | AGGRESSIVE_PROXIMITY
     description: str       # for Claude API natural language layer
 
 class AnomalyDetector:
@@ -70,6 +111,13 @@ class AnomalyDetector:
         if baseline:
             baseline.update(features)
 
+        intent = infer_intent_label(
+            anomalous_features=anomalous,
+            composite_score=composite,
+            proximity_flag=proximity_flag,
+            features=features,
+        )
+
         return AnomalyEvent(
             norad_id=norad_id,
             epoch=features['epoch'],
@@ -79,12 +127,13 @@ class AnomalyDetector:
             iso_score=iso_score,
             proximity_flag=proximity_flag,
             anomalous_features=anomalous,
-            description=self._describe(norad_id, severity, features, anomalous)
+            intent_label=intent,
+            description=self._describe(norad_id, severity, features, anomalous, intent)
         )
 
-    def _describe(self, norad_id, severity, features, anomalous):
+    def _describe(self, norad_id, severity, features, anomalous, intent_label):
         return (
-            f"NORAD {norad_id} | {severity} | "
+            f"NORAD {norad_id} | {severity} | intent={intent_label} | "
             f"delta_v_proxy={features.get('delta_v_proxy', 0):.2f} m/s | "
             f"anomalous_features={anomalous}"
         )

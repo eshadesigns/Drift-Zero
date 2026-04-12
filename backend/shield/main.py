@@ -87,7 +87,7 @@ DRY_RUN_CATALOG_LIMIT = 200         # total threat catalog size (--dry-run)
 MAX_TCA_WORKERS       = 6           # parallel TCA threads
 MAX_TCA_PAIRS         = 5000        # cap after screening to keep runtime manageable
 
-MISS_FILTER_KM = 200.0
+MISS_FILTER_KM = 1000.0
 PC_FILTER      = 1e-15
 PC_LOG_MIN     = 1e-12              # Pc floor for log-scale (= 0 points)
 PC_LOG_MAX     = 1e-2               # Pc ceiling for log-scale (= 50 points)

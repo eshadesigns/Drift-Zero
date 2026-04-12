@@ -51,9 +51,9 @@ from sklearn.ensemble import IsolationForest
 sys.path.insert(0, str(Path(__file__).parent))
 
 from pipeline.tle_ingest import SpaceTrackClient, ingest
-from rogue.anomaly_detector import FEATURE_KEYS, AnomalyDetector
-from rogue.feature_engineering import extract_delta_features
-from rogue.pol_model import SatelliteBaseline
+from backend.rogue.anomaly_detector import FEATURE_KEYS, AnomalyDetector
+from backend.rogue.feature_engineering import extract_delta_features
+from backend.rogue.pol_model import SatelliteBaseline
 
 load_dotenv()
 
@@ -283,7 +283,7 @@ def run(
                 if hasattr(ev.epoch, "strftime")
                 else str(ev.epoch)
             )
-            print(f"  [{ev.severity}]  NORAD {ev.norad_id}  epoch={epoch_str}")
+            print(f"  [{ev.severity}]  NORAD {ev.norad_id}  epoch={epoch_str}  intent={ev.intent_label}")
             print(
                 f"    composite={ev.composite_score:.3f}  "
                 f"z_max={ev.z_score_max:.2f}  "

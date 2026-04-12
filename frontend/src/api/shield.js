@@ -1,6 +1,7 @@
 // src/api/shield.js
-// Fetches conjunction events from the Shield FastAPI backend and normalizes
-// the response shape to match what the dashboard components expect.
+// Fetches conjunction events from the unified Drift Zero API (backend/api.py)
+// and normalizes the response shape to match what the dashboard components expect.
+// The unified API enriches each event with a Claude-generated summary field.
 
 const BASE_URL = import.meta.env.VITE_SHIELD_API_URL ?? 'http://localhost:8000'
 
@@ -22,7 +23,7 @@ function formatTCA(tcaUtc) {
   return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`
 }
 
-// ── Map Shield API event → dashboard conjunction shape ────────────────────────
+// ── Map API event → dashboard conjunction shape ───────────────────────────────
 export function normalizeConjunction(event) {
   const riskScore = Math.round(event.risk_score)
   return {
@@ -44,29 +45,35 @@ export function normalizeConjunction(event) {
     confidence:           event.confidence,
     kpIndex:              event.kp_index,
     dataAgeMinutes:       event.data_age_minutes,
+    // Claude-generated threat summary — present when the API is reachable,
+    // null when the Claude call failed or the field is absent.
+    summary:              event.summary ?? null,
   }
 }
 
 // ── Derive StatsBar numbers from a normalized conjunction list ─────────────────
 export function deriveStats(conjunctions) {
   const n = conjunctions.length
-  const avgPc = n > 0
-    ? conjunctions.reduce((sum, c) => sum + c.probability, 0) / n
+  // Max Pc is more operationally meaningful than average — it surfaces the
+  // worst-case event. Average hides signal when most events have Pc near zero.
+  const maxPc = n > 0
+    ? Math.max(...conjunctions.map(c => c.probability))
     : 0
-  const primaryIds = new Set(conjunctions.map(c => c.primarySatId))
 
   return {
-    activeSatellites:    primaryIds.size,
+    // activeSatellites intentionally omitted — let mockFleetStats provide the
+    // fleet-wide count rather than overriding with 1 (single primary satellite).
     activeConjunctions:  n,
     criticalAlerts:      conjunctions.filter(c => c.severity === 'CRITICAL').length,
-    avgCollisionProb:    avgPc,
+    maxCollisionProb:    maxPc,
   }
 }
 
 // ── Fetch conjunctions from Shield API ───────────────────────────────────────
+// noradId: NORAD CAT ID of the primary satellite to analyse.
 // Returns { conjunctions, stats } on success, or throws so the caller can fall back.
-export async function fetchConjunctions({ minRisk = 0, limit = 100 } = {}) {
-  const url = `${BASE_URL}/conjunctions?min_risk=${minRisk}&limit=${limit}`
+export async function fetchConjunctions({ noradId = 25544, minRisk = 0, limit = 100 } = {}) {
+  const url = `${BASE_URL}/api/conjunctions/${noradId}?min_risk=${minRisk}&limit=${limit}`
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Shield API ${res.status}: ${res.statusText}`)
   const data = await res.json()
