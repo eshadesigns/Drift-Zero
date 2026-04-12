@@ -1,5 +1,3 @@
-import { conjunctions } from '../../data/mockData'
-
 const SEVERITY_COLOR = {
   CRITICAL: '#f87171',
   HIGH: '#fb923c',
@@ -15,9 +13,23 @@ const SEVERITY_BG = {
 }
 
 
-export default function AlertQueue({ selected, onSelect }) {
+export default function AlertQueue({
+  conjunctions = [],
+  loading = false,
+  selected,
+  onSelect,
+}) {
+  const criticalCount = loading
+    ? null
+    : conjunctions.filter(c => c.severity === 'CRITICAL').length
+
   return (
     <div style={{ padding: '12px 0 4px' }}>
+      <style>{`
+        @keyframes drift-queue-spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
       {/* Header */}
       <div style={{
         display: 'flex',
@@ -30,15 +42,57 @@ export default function AlertQueue({ selected, onSelect }) {
           Conjunction Queue
         </span>
         <span style={{
-          fontSize: 10, fontWeight: 600, color: '#f87171',
-          background: 'rgba(248,113,113,0.12)', borderRadius: 10,
+          fontSize: 10, fontWeight: 600,
+          color: loading ? '#64748b' : '#f87171',
+          background: loading ? 'rgba(100,116,139,0.15)' : 'rgba(248,113,113,0.12)',
+          borderRadius: 10,
           padding: '2px 8px', letterSpacing: '0.05em',
         }}>
-          {conjunctions.filter(c => c.severity === 'CRITICAL').length} CRITICAL
+          {loading ? '…' : `${criticalCount} CRITICAL`}
         </span>
       </div>
 
-      {/* List */}
+      {loading ? (
+        <div
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 14,
+          padding: '36px 24px 48px',
+          textAlign: 'center',
+        }}
+        >
+          <div
+            aria-hidden
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: '50%',
+              border: '2px solid rgba(34, 211, 238, 0.2)',
+              borderTopColor: '#22d3ee',
+              animation: 'drift-queue-spin 0.75s linear infinite',
+            }}
+          />
+          <p style={{
+            margin: 0,
+            fontSize: 12,
+            color: '#94a3b8',
+            lineHeight: 1.5,
+            maxWidth: 220,
+          }}>
+            Fetching live conjunction data...
+          </p>
+          <span style={{ fontSize: 10, color: '#475569' }}>
+            Space-Track · Shield pipeline
+          </span>
+        </div>
+      ) : (
+      /* List */
       <div>
         {conjunctions.map((c) => {
           const isSelected = selected?.id === c.id
@@ -105,6 +159,7 @@ export default function AlertQueue({ selected, onSelect }) {
           )
         })}
       </div>
+      )}
     </div>
   )
 }

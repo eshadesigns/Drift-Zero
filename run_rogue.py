@@ -51,9 +51,9 @@ from sklearn.ensemble import IsolationForest
 sys.path.insert(0, str(Path(__file__).parent))
 
 from pipeline.tle_ingest import SpaceTrackClient, ingest
-from rogue.anomaly_detector import FEATURE_KEYS, AnomalyDetector
-from rogue.feature_engineering import extract_delta_features
-from rogue.pol_model import SatelliteBaseline
+from backend.rogue.anomaly_detector import FEATURE_KEYS, AnomalyDetector
+from backend.rogue.feature_engineering import extract_delta_features
+from backend.rogue.pol_model import SatelliteBaseline
 
 load_dotenv()
 

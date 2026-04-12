@@ -48,6 +48,7 @@ from backend.shield.tca import find_tca
 from backend.shield.probability import compute_probability
 from backend.shield.maneuver import compute_maneuvers
 from backend.shield.cascade import compute_cascade, LABEL_SLUGS
+from backend.shield.maneuver_detector import extract_operator
 
 # ── Config ────────────────────────────────────────────────────────────────────
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
@@ -90,7 +91,7 @@ MAX_TCA_WORKERS       = 6           # parallel TCA threads
 MAX_TCA_PAIRS         = 5000        # cap after screening to keep runtime manageable
 
 MISS_FILTER_KM = 200.0
-PC_FILTER      = 1e-15
+PC_FILTER      = 1e-16
 PC_LOG_MIN     = 1e-12              # Pc floor for log-scale (= 0 points)
 PC_LOG_MAX     = 1e-2               # Pc ceiling for log-scale (= 50 points)
 
@@ -108,6 +109,49 @@ OUTPUT_FILE = OUTPUT_DIR / "conjunctions.json"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
+
+# ── Operator do-nothing confidence seed table ─────────────────────────────────
+# Probability that the secondary satellite's operator will maneuver away from
+# a conjunction without being prompted.  Derived from historical maneuver rate
+# data (maneuvers/sat/month): HIGH >= 1.0, MODERATE >= 0.2, LOW < 0.2.
+_OPERATOR_DO_NOTHING: dict[str, float] = {
+    "STARLINK":   0.85,
+    "ONEWEB":     0.80,
+    "ISS":        0.75,
+    "GLOBALSTAR": 0.55,
+    "IRIDIUM":    0.60,
+    "CSS":        0.40,
+    "SPIRE":      0.35,
+    "PLANET":     0.35,
+    "SWARM":      0.30,
+    "ICEYE":      0.30,
+    "CAPELLA":    0.30,
+    "UMBRA":      0.30,
+    "SES":        0.25,
+    "INTELSAT":   0.25,
+    "TELESAT":    0.25,
+    "EUTELSAT":   0.25,
+    "COSMOS":     0.20,
+    "GALILEO":    0.20,
+    "GPS":        0.15,
+    "FENGYUN":    0.15,
+    "GLONASS":    0.12,
+    "BEIDOU":     0.12,
+    "UNKNOWN":    0.20,
+}
+_DEBRIS_DO_NOTHING   = 0.0   # debris cannot maneuver
+_DEFAULT_DO_NOTHING  = 0.25  # fallback for payloads with unmapped operator
+
+
+def _do_nothing_confidence(rec_b: dict, norad_confidence: Optional[dict]) -> float:
+    """Return do-nothing confidence for the secondary object."""
+    if rec_b.get("OBJECT_TYPE", "").strip().upper() == "DEBRIS":
+        return _DEBRIS_DO_NOTHING
+    if norad_confidence is not None:
+        val = norad_confidence.get(str(rec_b.get("NORAD_CAT_ID", "")))
+        if val is not None:
+            return val
+    return _DEFAULT_DO_NOTHING
 
 
 # ── Space-Track auth & fetch ──────────────────────────────────────────────────
@@ -353,6 +397,7 @@ def _run_tca_pair(
     debug_sink: Optional[list] = None,
     miss_sink: Optional[list] = None,
     kp: Optional[float] = None,
+    norad_confidence: Optional[dict] = None,
 ) -> Optional[dict]:
     """
     Run TCA -> probability for one candidate pair.
@@ -441,7 +486,7 @@ def _run_tca_pair(
         "confidence":             confidence,
         "kp_index":               round(kp, 1) if kp is not None else None,
         "risk_score":             risk,
-        "do_nothing_confidence":  0.5,   # placeholder -- Taher/Nikhil to replace
+        "do_nothing_confidence":  _do_nothing_confidence(rec_b, norad_confidence),
         "data_source":            "spacetrack",
         "data_age_minutes":       round(data_age, 1),
     }
@@ -547,6 +592,120 @@ def _print_summary(
     print(SEP + "\n")
 
 
+# ── Databricks Delta Lake write ───────────────────────────────────────────────
+
+def _write_conjunctions_to_databricks(
+    events: list[dict], norad_id: int, primary_name: str
+) -> None:
+    """
+    Write conjunction events to drift_zero.orbital.conjunctions Delta table.
+    Non-blocking on error — a failed write never breaks the API response.
+    """
+    host    = os.getenv("DATABRICKS_HOST")
+    token   = os.getenv("DATABRICKS_TOKEN")
+    wh_id   = os.getenv("DATABRICKS_WAREHOUSE_ID")
+    catalog = os.getenv("DATABRICKS_CATALOG", "drift_zero")
+    schema  = os.getenv("DATABRICKS_SCHEMA", "orbital")
+
+    if not (host and token and wh_id):
+        log.warning("Databricks env vars not set — skipping Delta write")
+        return
+
+    try:
+        from databricks.sdk import WorkspaceClient
+        from databricks.sdk.service.sql import StatementState
+    except ImportError:
+        log.warning("databricks-sdk not installed — skipping Delta write")
+        return
+
+    w     = WorkspaceClient(host=host, token=token)
+    table = f"`{catalog}`.`{schema}`.`conjunctions`"
+
+    ddl = f"""
+    CREATE TABLE IF NOT EXISTS {table} (
+        event_id               STRING,
+        timestamp_utc          STRING,
+        primary_norad_id       INT,
+        primary_name           STRING,
+        secondary_norad_id     INT,
+        secondary_name         STRING,
+        secondary_object_type  STRING,
+        tca_utc                STRING,
+        miss_distance_km       DOUBLE,
+        relative_velocity_km_s DOUBLE,
+        collision_probability  DOUBLE,
+        risk_score             DOUBLE,
+        do_nothing_confidence  DOUBLE,
+        confidence             STRING,
+        kp_index               DOUBLE,
+        data_age_minutes       DOUBLE,
+        data_source            STRING
+    )
+    USING DELTA
+    """
+    try:
+        stmt = w.statement_execution.execute_statement(
+            warehouse_id=wh_id, statement=ddl, wait_timeout="30s",
+        )
+        if stmt.status.state != StatementState.SUCCEEDED:
+            log.warning("Databricks DDL state: %s — %s", stmt.status.state, stmt.status.error)
+            return
+    except Exception as exc:
+        log.warning("Databricks table create failed: %s", exc)
+        return
+
+    if not events:
+        return
+
+    def _v(val):
+        if val is None:
+            return "NULL"
+        if isinstance(val, str):
+            return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"
+        return str(val)
+
+    rows_sql = ",\n".join(
+        "({})".format(", ".join(_v(x) for x in [
+            e.get("event_id", ""),
+            e.get("timestamp_utc", ""),
+            e.get("primary", {}).get("norad_id", 0),
+            e.get("primary", {}).get("name", ""),
+            e.get("secondary", {}).get("norad_id", 0),
+            e.get("secondary", {}).get("name", ""),
+            e.get("secondary", {}).get("object_type", ""),
+            e.get("tca_utc", ""),
+            e.get("miss_distance_km", 0.0),
+            e.get("relative_velocity_km_s", 0.0),
+            e.get("collision_probability", 0.0),
+            e.get("risk_score", 0.0),
+            e.get("do_nothing_confidence", 0.0),
+            e.get("confidence", ""),
+            e.get("kp_index") if e.get("kp_index") is not None else 0.0,
+            e.get("data_age_minutes", 0.0),
+            e.get("data_source", "spacetrack"),
+        ]))
+        for e in events
+    )
+    insert_sql = f"INSERT INTO {table} VALUES\n{rows_sql}"
+
+    try:
+        stmt = w.statement_execution.execute_statement(
+            warehouse_id=wh_id, statement=insert_sql, wait_timeout="60s",
+        )
+        if stmt.status.state == StatementState.SUCCEEDED:
+            log.info(
+                "Databricks: wrote %d conjunction events for NORAD %d (%s)",
+                len(events), norad_id, primary_name,
+            )
+        else:
+            log.warning(
+                "Databricks INSERT state: %s — %s",
+                stmt.status.state, stmt.status.error,
+            )
+    except Exception as exc:
+        log.warning("Databricks INSERT failed: %s", exc)
+
+
 # ── Main pipeline ─────────────────────────────────────────────────────────────
 
 def run_pipeline(
@@ -602,6 +761,22 @@ def run_pipeline(
     sat_by_norad    = {r.get("NORAD_CAT_ID"): s for r, s in parsed_catalog}
     catalog_records = [r for r, _ in parsed_catalog]
 
+    # Build NORAD → do_nothing_confidence lookup from catalog
+    norad_confidence: dict[str, float] = {}
+    for rec in catalog_records:
+        obj_type = rec.get("OBJECT_TYPE", "").strip().upper()
+        if obj_type == "DEBRIS":
+            norad_confidence[str(rec.get("NORAD_CAT_ID", ""))] = _DEBRIS_DO_NOTHING
+        else:
+            op  = extract_operator(
+                str(rec.get("OBJECT_NAME", "")),
+                str(rec.get("COUNTRY_CODE", "")),
+            )
+            norad_confidence[str(rec.get("NORAD_CAT_ID", ""))] = _OPERATOR_DO_NOTHING.get(
+                op, _DEFAULT_DO_NOTHING
+            )
+    log.info("Operator confidence map built for %d catalog objects", len(norad_confidence))
+
     # Store pipeline state for cascade analysis
     _pipeline_cache[norad_id] = {
         "primary_rec":     primary_rec,
@@ -653,6 +828,7 @@ def run_pipeline(
             debug_sink=debug_records,
             miss_sink=all_miss_km,
             kp=kp_index,
+            norad_confidence=norad_confidence,
         )
 
     with ThreadPoolExecutor(max_workers=MAX_TCA_WORKERS) as pool:
@@ -675,6 +851,15 @@ def run_pipeline(
 
     # 6. Sort descending by risk_score
     events.sort(key=lambda e: e["risk_score"], reverse=True)
+
+    # 6a. Write to Databricks Delta Lake (background thread — non-blocking)
+    if not dry_run and events:
+        import threading
+        threading.Thread(
+            target=_write_conjunctions_to_databricks,
+            args=(events, norad_id, primary_name),
+            daemon=True,
+        ).start()
 
     # 7. Write output JSON
     if dry_run:

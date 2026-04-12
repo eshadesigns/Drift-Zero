@@ -1,4 +1,4 @@
-import { fleetStats } from '../../data/mockData'
+import { fleetStats as mockFleetStats } from '../../data/mockData'
 
 const S = {
   bar: {
@@ -88,8 +88,10 @@ const severity = {
   normal: '#94a3b8',
 }
 
-export default function StatsBar() {
-  const probDisplay = (fleetStats.avgCollisionProb * 100).toExponential(2) + '%'
+export default function StatsBar({ stats: propStats, isLive = false }) {
+  const fleetStats = propStats ?? mockFleetStats
+  const prob = fleetStats.maxCollisionProb ?? fleetStats.avgCollisionProb ?? 0
+  const probDisplay = prob < 1e-12 ? '< 1e-10%' : (prob * 100).toExponential(2) + '%'
 
   return (
     <div style={S.bar}>
@@ -105,7 +107,7 @@ export default function StatsBar() {
       <div style={S.stats}>
         <div style={S.stat}>
           <span style={S.statLabel}>Active Sats</span>
-          <span style={{ ...S.statValue, color: '#94a3b8' }}>{fleetStats.activeSatellites}</span>
+          <span style={{ ...S.statValue, color: '#94a3b8' }}>{fleetStats.activeSatellites?.toLocaleString() ?? '—'}</span>
         </div>
         <div style={S.divider} />
         <div style={S.stat}>
@@ -119,13 +121,13 @@ export default function StatsBar() {
         </div>
         <div style={S.divider} />
         <div style={S.stat}>
-          <span style={S.statLabel}>Avg P(collision)</span>
+          <span style={S.statLabel}>Max P(collision)</span>
           <span style={{ ...S.statValue, color: severity.medium }}>{probDisplay}</span>
         </div>
         <div style={S.divider} />
         <div style={S.stat}>
           <span style={S.statLabel}>Tracked Objects</span>
-          <span style={{ ...S.statValue, color: '#94a3b8' }}>{fleetStats.totalTrackedObjects.toLocaleString()}</span>
+          <span style={{ ...S.statValue, color: '#94a3b8' }}>{fleetStats.totalTrackedObjects?.toLocaleString()}</span>
         </div>
         <div style={S.divider} />
         <div style={S.stat}>
@@ -133,6 +135,20 @@ export default function StatsBar() {
           <span style={{ ...S.statValue, color: '#94a3b8' }}>{fleetStats.maneuversThisMonth}</span>
         </div>
       </div>
+
+      {/* Live/Mock badge */}
+      <span style={{
+        fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+        color: isLive ? '#22d3ee' : '#64748b',
+        background: isLive ? 'rgba(34,211,238,0.1)' : 'rgba(100,116,139,0.1)',
+        border: `1px solid ${isLive ? 'rgba(34,211,238,0.3)' : 'rgba(100,116,139,0.3)'}`,
+        borderRadius: 4,
+        padding: '2px 7px',
+        marginLeft: 12,
+        flexShrink: 0,
+      }}>
+        {isLive ? 'LIVE' : 'MOCK'}
+      </span>
 
       <span style={S.timestamp}>
         {new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC

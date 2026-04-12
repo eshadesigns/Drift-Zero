@@ -27,8 +27,8 @@ evaluated analytically; only a 1D numerical integral over y remains.
 
 Defaults (combined 1-sigma for both objects combined)
 ------------------------------------------------------
-  σ_r   = 0.1 km  (radial)
-  σ_c   = 0.5 km  (cross-track / along-track)
+  σ_r   = 1.0 km  (radial)
+  σ_c   = 5.0 km  (cross-track / along-track)
   r_HBR = 0.01 km (10 m hard-body radius)
 
 Input

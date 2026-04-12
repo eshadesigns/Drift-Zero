@@ -10,6 +10,7 @@ node_modules/
 __pycache__/
 *.pyc
 .claude/
+.claude/settings.local.json
 backend/shield/output/
 .env
 drift_zero_spec_v4.pdf
@@ -18,3 +19,5 @@ drift_zero_spec_v4.pdf
 .env.local
 frontend/node_modules
 frontend/dist
+cosmos2576_feb2026.json
+data/

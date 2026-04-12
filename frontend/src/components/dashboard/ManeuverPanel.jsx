@@ -1,26 +1,65 @@
-import { useState } from 'react'
-import { maneuvers } from '../../data/mockData'
+import { useState, useEffect } from 'react'
+import { fetchManeuvers } from '../../api/shield'
 
-const OPTION_COLORS = {
-  A: { base: '#f87171', bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.25)' },
-  B: { base: '#22d3ee', bg: 'rgba(34,211,238,0.08)', border: 'rgba(34,211,238,0.25)' },
-  C: { base: '#86efac', bg: 'rgba(134,239,172,0.08)', border: 'rgba(134,239,172,0.25)' },
+const OPTION_STYLES = [
+  { id: 'A', base: '#f87171', bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.25)' },
+  { id: 'B', base: '#22d3ee', bg: 'rgba(34,211,238,0.08)',  border: 'rgba(34,211,238,0.25)'  },
+  { id: 'C', base: '#86efac', bg: 'rgba(134,239,172,0.08)', border: 'rgba(134,239,172,0.25)' },
+]
+
+const LABEL_TO_SLUG = {
+  'Maximum Safety': 'maximum_safety',
+  'Balanced':       'balanced',
+  'Fuel Efficient': 'fuel_efficient',
 }
 
-function formatCost(n) {
-  if (n >= 1000) return `$${(n / 1000).toFixed(0)}k`
-  return `$${n}`
+function fmtCost(n) {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000)     return `$${(n / 1_000).toFixed(0)}k`
+  return `$${n.toFixed(0)}`
 }
 
-function formatProb(p) {
-  return p.toExponential(2)
-}
-
-export default function ManeuverPanel({ conjunction }) {
-  const entry = maneuvers.find(m => m.conjunctionId === conjunction.id)
+export default function ManeuverPanel({ conjunction, onSelectManeuver }) {
+  const [options, setOptions]   = useState(null)
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState(null)
   const [selected, setSelected] = useState(null)
 
-  if (!entry) return null
+  const noradId = conjunction?.primarySatId
+  const eventId = conjunction?.id
+
+  useEffect(() => {
+    if (!noradId || !eventId) return
+    setLoading(true)
+    setOptions(null)
+    setError(null)
+    setSelected(null)
+    fetchManeuvers(noradId, eventId)
+      .then(data => setOptions(data))
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [noradId, eventId])
+
+  if (loading) return (
+    <div style={{ margin: '0 10px 6px', padding: '16px', fontSize: 11, color: '#64748b', textAlign: 'center' }}>
+      Computing maneuver options...
+    </div>
+  )
+
+  if (error) return (
+    <div style={{ margin: '0 10px 6px', padding: '12px', fontSize: 11, color: '#ef4444' }}>
+      Maneuver compute failed — {error}
+    </div>
+  )
+
+  if (!options) return null
+
+  const handleSelect = (opt, styleId) => {
+    const isSelected = selected === styleId
+    const next = isSelected ? null : styleId
+    setSelected(next)
+    onSelectManeuver?.(next ? LABEL_TO_SLUG[opt.label] : null)
+  }
 
   return (
     <div style={{
@@ -30,25 +69,23 @@ export default function ManeuverPanel({ conjunction }) {
       border: '1px solid rgba(255,255,255,0.07)',
       padding: '12px 14px',
     }}>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase' }}>
           Maneuver Options
         </span>
         <span style={{ fontSize: 10, color: '#334155', fontVariantNumeric: 'tabular-nums' }}>
-          {conjunction.id.slice(-3)}
+          current miss {options.current_miss_km?.toFixed(1)} km
         </span>
       </div>
 
-      {/* Options */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {entry.options.map((opt) => {
-          const c = OPTION_COLORS[opt.id]
-          const isSelected = selected === opt.id
+        {options.maneuver_options.map((opt, i) => {
+          const c = OPTION_STYLES[i]
+          const isSelected = selected === c.id
           return (
             <div
-              key={opt.id}
-              onClick={() => setSelected(isSelected ? null : opt.id)}
+              key={c.id}
+              onClick={() => handleSelect(opt, c.id)}
               style={{
                 borderRadius: 5,
                 background: isSelected ? c.bg : 'rgba(255,255,255,0.02)',
@@ -58,7 +95,6 @@ export default function ManeuverPanel({ conjunction }) {
                 transition: 'all 0.15s',
               }}
             >
-              {/* Option header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                   <span style={{
@@ -66,37 +102,25 @@ export default function ManeuverPanel({ conjunction }) {
                     color: c.base, background: `${c.base}18`,
                     borderRadius: 3, padding: '1px 6px', letterSpacing: '0.06em',
                   }}>
-                    {opt.id}
+                    {c.id}
                   </span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: '#e2e8f0' }}>
                     {opt.label}
                   </span>
-                  {opt.cascadeRiskCreated && (
-                    <span style={{
-                      fontSize: 9, color: '#fbbf24',
-                      background: 'rgba(251,191,36,0.12)',
-                      borderRadius: 3, padding: '1px 5px', letterSpacing: '0.06em',
-                    }}>
-                      CASCADE
-                    </span>
-                  )}
                 </div>
                 <span style={{ fontSize: 13, fontWeight: 700, color: c.base }}>
-                  {opt.riskReductionPct}%
+                  +{opt.miss_increase_km} km
                 </span>
               </div>
 
-              {/* Metrics grid */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px 8px' }}>
-                <Metric label="ΔV" value={`${opt.deltaVms} m/s`} />
-                <Metric label="Fuel" value={`${opt.fuelKg} kg`} />
-                <Metric label="Cost" value={formatCost(opt.costUSD)} />
-                <Metric label="New P(c)" value={formatProb(opt.newProbability)} />
-                <Metric label="Lifespan −" value={`${opt.lifespanImpactDays}d`} />
-                <Metric label="Window" value={`${opt.executionWindowMin}m`} />
+                <Metric label="ΔV"        value={`${opt.delta_v_ms.toFixed(2)} m/s`} />
+                <Metric label="Fuel"      value={`${opt.fuel_kg.toFixed(3)} kg`} />
+                <Metric label="Cost"      value={fmtCost(opt.fuel_cost_usd)} />
+                <Metric label="Lifespan−" value={`${opt.lifespan_reduction_days.toFixed(1)}d`} />
+                <Metric label="Score"     value={`${(opt.composite_score * 100).toFixed(0)}%`} />
               </div>
 
-              {/* Execute button (only when selected) */}
               {isSelected && (
                 <button
                   style={{
@@ -109,10 +133,15 @@ export default function ManeuverPanel({ conjunction }) {
                   }}
                   onClick={(e) => {
                     e.stopPropagation()
-                    alert(`Maneuver Option ${opt.id} — ${opt.label}\nΔV: ${opt.deltaVms} m/s | Fuel: ${opt.fuelKg} kg\nCost: ${formatCost(opt.costUSD)}\n\n(Demo — no backend connected)`)
+                    alert(
+                      `Maneuver Option ${c.id} — ${opt.label}\n` +
+                      `ΔV: ${opt.delta_v_ms.toFixed(2)} m/s | Fuel: ${opt.fuel_kg.toFixed(3)} kg\n` +
+                      `Cost: ${fmtCost(opt.fuel_cost_usd)} | Lifespan −${opt.lifespan_reduction_days.toFixed(1)}d\n\n` +
+                      `(Demo — no uplink connected)`
+                    )
                   }}
                 >
-                  Execute Option {opt.id}
+                  Execute Option {c.id}
                 </button>
               )}
             </div>

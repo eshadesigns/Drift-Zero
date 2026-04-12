@@ -5,16 +5,60 @@ import ManeuverPanel from './components/dashboard/ManeuverPanel'
 import NaturalLanguageAlert from './components/dashboard/NaturalLanguageAlert'
 import CascadeAnalysis from './components/dashboard/CascadeAnalysis'
 import SatelliteModal from './components/SatelliteModal'
+import RoguePanel from './components/RoguePanel'
 import { satStore } from './satStore'
+import { fetchConjunctions, deriveStats } from './api/shield'
+import { fleetStats as mockFleetStats, conjunctions as mockConjunctions } from './data/mockData.js'
 
 const PANEL_MIN = 15   // % of screen width
 const PANEL_MAX = 55
 const DEFAULT_PANEL = 30
 
-export default function DashboardOverlay({ activated = false }) {
+export default function DashboardOverlay({ activated = false, noradId = 25544 }) {
+  const [activeMode, setActiveMode] = useState('shield')   // 'shield' | 'rogue'
   const [selectedConjunction, setSelectedConjunction] = useState(null)
+  const [selectedManeuver, setSelectedManeuver] = useState(null)  // slug for cascade
   const [panelPct, setPanelPct] = useState(DEFAULT_PANEL)
   const [collapsed, setCollapsed] = useState('panels') // start hidden, open on activate
+
+  // ── Shield data ─────────────────────────────────────────────────────────────
+  const [conjunctions, setConjunctions] = useState([])
+  const [conjunctionsLoading, setConjunctionsLoading] = useState(true)
+  const [stats, setStats] = useState(mockFleetStats)
+  const [isLive, setIsLive] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setConjunctionsLoading(true)
+    setConjunctions([])
+    setSelectedConjunction(null)
+    setIsLive(false)
+
+    const controller = new AbortController()
+    fetchConjunctions(noradId, { minRisk: 0, limit: 100 }, controller.signal)
+      .then(({ conjunctions: live, stats: liveStats }) => {
+        if (cancelled) return
+        setIsLive(true)
+        if (live.length > 0) {
+          setConjunctions(live)
+          setStats(prev => ({ ...prev, ...liveStats }))
+        } else {
+          setConjunctions(mockConjunctions ?? [])
+        }
+      })
+      .catch((err) => {
+        if (cancelled || err.name === 'AbortError') return
+        setConjunctions(mockConjunctions ?? [])
+      })
+      .finally(() => {
+        if (!cancelled) setConjunctionsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [noradId])
 
   // Slide panels in after activation
   useEffect(() => {
@@ -23,9 +67,10 @@ export default function DashboardOverlay({ activated = false }) {
       return () => clearTimeout(t)
     }
   }, [activated])
+
   const [isDragging, setIsDragging] = useState(false)
   const [dividerHover, setDividerHover] = useState(false)
-  const tabDragMoved = useRef(false) // tracks whether tab mousedown became a drag
+  const tabDragMoved = useRef(false)
 
   // ── Satellite selection from GlobeView ────────────────────────────────────
   const [selectedSat, setSelectedSat] = useState(null)
@@ -40,13 +85,8 @@ export default function DashboardOverlay({ activated = false }) {
     })
   }, [])
 
-  const handleSatClose = useCallback(() => {
-    satStore.onClose?.()
-  }, [])
-
-  const handleSatAnalyze = useCallback(() => {
-    satStore.onAnalyze?.()
-  }, [])
+  const handleSatClose = useCallback(() => { satStore.onClose?.() }, [])
+  const handleSatAnalyze = useCallback(() => { satStore.onAnalyze?.() }, [])
 
   // ── Drag-to-resize ──────────────────────────────────────────────────────────
   const onDividerMouseDown = useCallback((e) => {
@@ -71,7 +111,7 @@ export default function DashboardOverlay({ activated = false }) {
     }
   }, [isDragging])
 
-  // ── Sync CSS vars → globe wrapper reads these to shift itself ───────────────
+  // ── Sync CSS vars ───────────────────────────────────────────────────────────
   useEffect(() => {
     const activePct = collapsed === 'panels' ? 0 : panelPct
     document.documentElement.style.setProperty('--panel-pct', activePct)
@@ -88,14 +128,13 @@ export default function DashboardOverlay({ activated = false }) {
     }
   }
 
-  // ── Derived widths ──────────────────────────────────────────────────────────
-  const panelWidth = collapsed === 'panels' ? '0%' : `${panelPct}%`
+  const panelWidth   = collapsed === 'panels' ? '0%' : `${panelPct}%`
   const dividerRight = collapsed === 'panels' ? 0 : `${panelPct}%`
-  const transition = isDragging ? 'none' : 'width 0.25s ease, right 0.25s ease'
+  const transition   = isDragging ? 'none' : 'width 0.25s ease, right 0.25s ease'
 
   return (
     <>
-      {/* ── StatsBar — top (hidden until activated) ─────────────────────────── */}
+      {/* ── StatsBar ─────────────────────────────────────────────────────────── */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
         pointerEvents: activated ? 'auto' : 'none',
@@ -103,7 +142,7 @@ export default function DashboardOverlay({ activated = false }) {
         transform: activated ? 'translateY(0)' : 'translateY(-100%)',
         transition: 'opacity 0.5s ease 0.4s, transform 0.5s ease 0.4s',
       }}>
-        <StatsBar />
+        <StatsBar stats={stats} isLive={isLive} />
       </div>
 
       {/* ── Right panel ──────────────────────────────────────────────────────── */}
@@ -125,14 +164,10 @@ export default function DashboardOverlay({ activated = false }) {
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
           borderLeft: '1px solid rgba(255,255,255,0.07)',
-          overflowY: 'auto',
-          overflowX: 'hidden',
           display: 'flex',
           flexDirection: 'column',
         }}>
           {selectedSat ? (
-            /* ── Satellite selected: show satellite info panel ── */
-            /* key forces remount + re-animation on each new satellite */
             <SatelliteModal
               key={selectedSat.id}
               sat={selectedSat}
@@ -143,25 +178,85 @@ export default function DashboardOverlay({ activated = false }) {
               inline
             />
           ) : (
-            /* ── Default: conjunction queue + detail panels ── */
             <>
-              <AlertQueue
-                selected={selectedConjunction}
-                onSelect={setSelectedConjunction}
-              />
-              {selectedConjunction && (
-                <>
-                  <NaturalLanguageAlert conjunction={selectedConjunction} />
-                  <ManeuverPanel conjunction={selectedConjunction} />
-                  <CascadeAnalysis conjunction={selectedConjunction} />
-                </>
-              )}
+              {/* ── Mode tab bar ──────────────────────────────────────────────── */}
+              <div style={{
+                display: 'flex',
+                borderBottom: '1px solid rgba(255,255,255,0.07)',
+                flexShrink: 0,
+              }}>
+                {['shield', 'rogue'].map(mode => {
+                  const active = activeMode === mode
+                  return (
+                    <button
+                      key={mode}
+                      onClick={() => setActiveMode(mode)}
+                      style={{
+                        flex: 1,
+                        padding: '10px 0',
+                        background: 'transparent',
+                        border: 'none',
+                        borderBottom: active ? '2px solid #22d3ee' : '2px solid transparent',
+                        color: active ? '#22d3ee' : '#64748b',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: '0.1em',
+                        textTransform: 'uppercase',
+                        cursor: 'pointer',
+                        transition: 'color 0.15s, border-color 0.15s',
+                      }}
+                    >
+                      {mode === 'shield' ? 'Shield' : 'Rogue'}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* ── Shield panel (keep mounted, hide when rogue active) ───────── */}
+              <div style={{
+                display: activeMode === 'shield' ? 'flex' : 'none',
+                flexDirection: 'column',
+                flex: 1,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+              }}>
+                <AlertQueue
+                  conjunctions={conjunctions}
+                  loading={conjunctionsLoading}
+                  selected={selectedConjunction}
+                  onSelect={(c) => { setSelectedConjunction(c); setSelectedManeuver(null) }}
+                />
+                {selectedConjunction && (
+                  <>
+                    <NaturalLanguageAlert conjunction={selectedConjunction} />
+                    <ManeuverPanel
+                      conjunction={selectedConjunction}
+                      onSelectManeuver={setSelectedManeuver}
+                    />
+                    <CascadeAnalysis
+                      conjunction={selectedConjunction}
+                      selectedManeuver={selectedManeuver}
+                    />
+                  </>
+                )}
+              </div>
+
+              {/* ── Rogue panel (keep mounted, hide when shield active) ───────── */}
+              <div style={{
+                display: activeMode === 'rogue' ? 'flex' : 'none',
+                flexDirection: 'column',
+                flex: 1,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+              }}>
+                <RoguePanel visible={activeMode === 'rogue'} />
+              </div>
             </>
           )}
         </div>
       </div>
 
-      {/* ── Divider — hidden until activated ────────────────────────────────── */}
+      {/* ── Divider ──────────────────────────────────────────────────────────── */}
       <div
         onMouseDown={activated ? onDividerMouseDown : undefined}
         onMouseEnter={() => setDividerHover(true)}
@@ -184,17 +279,14 @@ export default function DashboardOverlay({ activated = false }) {
               : 'transparent',
         }}
       >
-        {/* Always-visible collapse/expand tab */}
         <button
           onMouseDown={(e) => {
             e.stopPropagation()
             tabDragMoved.current = false
-            // Start the drag — if mouse never moves, we treat it as a click
             setIsDragging(true)
             setCollapsed(null)
           }}
-          onClick={(e) => {
-            // Only toggle if the mousedown didn't turn into a real drag
+          onClick={() => {
             if (!tabDragMoved.current) toggleCollapse()
           }}
           style={{
@@ -231,7 +323,6 @@ export default function DashboardOverlay({ activated = false }) {
         </button>
       </div>
 
-      {/* Cursor style during drag */}
       {isDragging && (
         <style>{`* { cursor: col-resize !important; user-select: none !important; }`}</style>
       )}

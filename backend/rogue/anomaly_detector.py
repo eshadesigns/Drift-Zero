@@ -4,7 +4,7 @@ from sklearn.ensemble import IsolationForest
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from rogue.pol_model import SatelliteBaseline
+from backend.rogue.pol_model import SatelliteBaseline
 
 FEATURE_KEYS = [
     'delta_mean_motion', 'delta_eccentricity', 'delta_inclination',
