@@ -27,7 +27,7 @@ const NORAD_TO_SAT_ID = {
   27424: 'AQUA',
 }
 
-export default function DashboardOverlay({ activated = false, noradId = 25544, demo = false, showAll = false }) {
+export default function DashboardOverlay({ activated = false, noradId = 25544, demo = false, showAll = false, onRetarget }) {
   const [activeMode, setActiveMode] = useState('shield')   // 'shield' | 'rogue'
   const [selectedConjunction, setSelectedConjunction] = useState(null)
   const [selectedManeuver, setSelectedManeuver] = useState(null)  // slug for cascade
@@ -106,6 +106,13 @@ export default function DashboardOverlay({ activated = false, noradId = 25544, d
     })
   }, [])
 
+  // When user clicks a satellite on the globe → make it the persistent active target
+  useEffect(() => {
+    if (selectedSat?.noradId && onRetarget) {
+      onRetarget(selectedSat.noradId, selectedSat.id)
+    }
+  }, [selectedSat?.noradId])
+
   const handleSatClose = useCallback(() => { satStore.onClose?.() }, [])
   const handleSatAnalyze = useCallback(() => { satStore.onAnalyze?.() }, [])
 
@@ -179,7 +186,7 @@ export default function DashboardOverlay({ activated = false, noradId = 25544, d
         transform: activated ? 'translateY(0)' : 'translateY(-100%)',
         transition: 'opacity 0.5s ease 0.4s, transform 0.5s ease 0.4s',
       }}>
-        <StatsBar stats={stats} isLive={isLive} />
+        <StatsBar stats={stats} isLive={isLive} onRetarget={onRetarget} trackedId={focusedSatId} />
       </div>
 
       {/* ── Right panel ──────────────────────────────────────────────────────── */}
@@ -316,7 +323,7 @@ export default function DashboardOverlay({ activated = false, noradId = 25544, d
                 overflowY: 'auto',
                 overflowX: 'hidden',
               }}>
-                <RoguePanel visible={activeMode === 'rogue'} />
+                <RoguePanel visible={activeMode === 'rogue'} demo={demo} focusedSatId={focusedSatId} />
               </div>
             </>
           )}

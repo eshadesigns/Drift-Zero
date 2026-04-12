@@ -5,6 +5,7 @@ import GlobeView from './components/GlobeView'
 import DashboardOverlay from './App.jsx'
 import LandingOverlay from './components/LandingOverlay.jsx'
 import { demoGlobeObjects } from './data/mockData.js'
+import { satStore } from './satStore.js'
 
 // Map NORAD ID → GlobeView entity ID (from SAT_TLES in GlobeView.jsx)
 const NORAD_TO_ENTITY_ID = {
@@ -127,6 +128,22 @@ function App() {
     })
   }, [activated, demoMode])
 
+  const handleRetarget = (noradId, entityId = null) => {
+    const numId = Number(noradId)
+    if (!numId || isNaN(numId)) return
+    const newEntityId = entityId ?? (NORAD_TO_ENTITY_ID[numId] ?? null)
+    setActiveNoradId(numId)
+    setFocusedEntityId(newEntityId)
+    // Zoom globe to new satellite
+    setTimeout(() => window._driftFocusSat?.(numId), 100)
+    // If called from the search bar (no entityId from globe click), clear the
+    // previously selected satellite so focusedSatId derives from the new noradId,
+    // not from a stale globe-click selection.
+    if (!entityId) {
+      satStore.close()
+    }
+  }
+
   const handleActivate = (noradId, demo = false) => {
     setDemoMode(demo)
     const entityId = noradId ? (NORAD_TO_ENTITY_ID[Number(noradId)] ?? null) : null
@@ -217,7 +234,7 @@ function App() {
 
       {/* Dashboard — slides in after activation */}
       <StrictMode>
-        <DashboardOverlay activated={activated} noradId={activeNoradId} demo={demoMode} showAll={showAllSats} />
+        <DashboardOverlay activated={activated} noradId={activeNoradId} demo={demoMode} showAll={showAllSats} onRetarget={handleRetarget} />
       </StrictMode>
 
       {/* Mask GlobeView's own UI chrome during landing */}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { fetchManeuvers } from '../../api/shield'
-import { demoPrimaryOrbits, demoSecondaryOrbits } from '../../data/mockData'
+import { SAT_ORBIT_PARAMS, DEBRIS_ORBIT_PARAMS } from '../../data/satelliteOrbits'
 
 const OPTION_STYLES = [
   { id: 'A', base: '#f87171', bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.25)' },
@@ -207,9 +207,11 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
     || conjunction?.primarySatName?.toUpperCase().includes('DEBRIS')
     || conjunction?.primarySatName?.toUpperCase().includes('R/B')
 
+  // Look up orbit params by satellite entity ID (e.g. 'ISS', 'SL1') — NOT conjunction ID.
+  // This is the single source of truth: same data as GlobeView, always consistent.
   const orbitParams = demo
-    ? (demoPrimaryOrbits[eventId] ?? { alt: 420, inclination: 51.6, lon: 0 })
-    : { alt: 420, inclination: 51.6, lon: 0 }
+    ? (SAT_ORBIT_PARAMS[conjunction?.primarySatId] ?? { alt: 420, inclination: 51.6 })
+    : { alt: 420, inclination: 51.6 }
 
   // ── Load / compute maneuver options ────────────────────────────────────────
   useEffect(() => {
@@ -219,7 +221,7 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
     setError(null)
 
     if (demo) {
-      const orb = demoPrimaryOrbits[eventId]
+      const orb = SAT_ORBIT_PARAMS[conjunction?.primarySatId]
       if (conjunction && orb) {
         const computed = computeManeuverOptions(conjunction, orb)
         setOptions({
@@ -259,16 +261,20 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
     cleanup(entityRef)
     cleanup(labelRef)
 
-    if (!demo || !eventId || !Cesium || !viewer) return
+    if (!demo || !eventId || !Cesium || !viewer || !conjunction) return
 
-    const orb    = demoPrimaryOrbits[eventId]
-    const secOrb = demoSecondaryOrbits?.[eventId]
+    // Look up by satellite entity ID — same source as GlobeView, always consistent
+    const primarySatId  = conjunction.primarySatId
+    const secondarySatId = conjunction.secondarySatId
+    const orb    = SAT_ORBIT_PARAMS[primarySatId]
+    // Secondary can be debris (DEB1–DEB28) or another satellite
+    const secOrb = DEBRIS_ORBIT_PARAMS[secondarySatId] ?? SAT_ORBIT_PARAMS[secondarySatId] ?? null
 
     try {
       // ── Primary satellite orbit (blue dashed — like "analyze trajectory") ──
       const primaryPositions = (orb?.tle1 && sat)
         ? buildOrbitFromTLE(Cesium, sat, orb.tle1, orb.tle2, 0)
-        : buildStaticOrbit(Cesium, orb?.alt ?? 420, orb?.inclination ?? 51.6, orb?.lon ?? 0)
+        : buildStaticOrbit(Cesium, orb?.alt ?? 420, orb?.inclination ?? 51.6, 0)
 
       if (primaryPositions.length >= 2) {
         primaryOrbitRef.current = viewer.entities.add({
@@ -290,7 +296,9 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
       // ── Secondary / threat orbit (orange = debris, red = satellite) ────────
       if (secOrb) {
         const secColor = secOrb.type === 'satellite' ? '#ef4444' : '#f97316'
-        const secPositions = buildDebrisOrbit(Cesium, secOrb)
+        const secPositions = secOrb.tle1 && sat
+          ? buildOrbitFromTLE(Cesium, sat, secOrb.tle1, secOrb.tle2, 0)
+          : buildDebrisOrbit(Cesium, secOrb)
         if (secPositions.length >= 2) {
           secondaryOrbitRef.current = viewer.entities.add({
             polyline: {
@@ -308,7 +316,7 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
     } catch (e) {
       console.warn('ManeuverPanel: orbit draw error', e)
     }
-  }, [demo, eventId])
+  }, [demo, eventId, conjunction?.primarySatId, conjunction?.secondarySatId])
 
   // ── Draw original + post-maneuver orbits when option selected ───────────────
   useEffect(() => {
@@ -333,8 +341,8 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
     const style = OPTION_STYLES[idx]
     if (!opt || !style) return
 
-    const orb         = demo ? demoPrimaryOrbits[eventId] : null
-    const { alt, inclination = 51.6, lon = 0 } = orbitParams
+    const orb         = demo ? SAT_ORBIT_PARAMS[conjunction?.primarySatId] : null
+    const { alt, inclination = 51.6 } = orbitParams
     const dAlt        = opt.altDelta ?? deltaAltKm(opt.delta_v_ms, alt)
     const newAlt      = alt + dAlt
     const newVel      = orbitalVelocity(newAlt)
@@ -351,7 +359,7 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
       // Original orbit — dashed white, real current altitude for reference
       const origPositions = (demo && orb?.tle1 && sat)
         ? buildOrbitFromTLE(Cesium, sat, orb.tle1, orb.tle2, 0)
-        : buildStaticOrbit(Cesium, alt, inclination, lon)
+        : buildStaticOrbit(Cesium, alt, inclination, 0)
 
       if (origPositions.length >= 2) {
         originalOrbitRef.current = viewer.entities.add({
