@@ -1,5 +1,3 @@
-import { conjunctions } from '../../data/mockData'
-
 const SEVERITY_COLOR = {
   CRITICAL: '#f87171',
   HIGH: '#fb923c',
@@ -15,7 +13,7 @@ const SEVERITY_BG = {
 }
 
 
-export default function AlertQueue({ selected, onSelect }) {
+export default function AlertQueue({ conjunctions = [], selected, onSelect }) {
   return (
     <div style={{ padding: '12px 0 4px' }}>
       {/* Header */}

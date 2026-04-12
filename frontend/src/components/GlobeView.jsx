@@ -209,6 +209,8 @@ export default function GlobeView() {
   const riskEntitiesRef    = useRef([])    // red-ring entities for at-risk objects
   const allTrajRef         = useRef([])    // all-trajectories overlay entities
   const analyzeModeRef     = useRef(false) // keep click handler in sync without re-init
+  const dynMapRef          = useRef({})   // id → satrec for dynamic entities added by _driftRenderConjunction
+  const dynMetaRef         = useRef({})   // id → obj-shape for dynamic entities (period, alt, etc.)
 
   const [selected, setSelected]         = useState(null)
   const [hovered, setHovered]           = useState(null)
@@ -279,6 +281,189 @@ export default function GlobeView() {
             )
             viewer.camera.flyTo({ destination: dest, duration: 2.5 })
           } catch (e) { console.warn('_driftFocusSat error', e) }
+        }
+
+        // ── Dynamic conjunction rendering ────────────────────────────────────
+        // dynMap:  id -> satrec for all live-rendered conjunction satellites.
+        // dynMeta: id -> obj-shape ({id,name,type,noradId,...}) so the click
+        //          handler can call satStore.select() for dynamically added entities.
+        // Both live as plain objects in init() scope — mutated in place.
+        const dynMap  = {}
+        dynMapRef.current  = dynMap   // expose to handleAnalyze (component-level useCallback)
+        const dynMeta = {}
+        dynMetaRef.current = dynMeta  // expose to handleAnalyze for period/alt lookups
+
+        window._driftRenderConjunction = (primaryTle, threatTles) => {
+          if (!viewer || viewer.isDestroyed() || !satellite) return
+
+          // 1. Remove every tracked entity (static sats + debris + previous dynamic)
+          if (trajectoryRef.current) {
+            viewer.entities.remove(trajectoryRef.current)
+            trajectoryRef.current = null
+          }
+          riskEntitiesRef.current.forEach(re => viewer.entities.remove(re))
+          riskEntitiesRef.current = []
+
+          Object.keys(entitiesRef.current).forEach(id => {
+            const e = entitiesRef.current[id]
+            if (e && viewer.entities.contains(e)) viewer.entities.remove(e)
+            delete entitiesRef.current[id]
+          })
+          Object.keys(satrecs.current).forEach(k => delete satrecs.current[k])
+          Object.keys(dynMap).forEach(k => delete dynMap[k])
+          Object.keys(dynMeta).forEach(k => delete dynMeta[k])
+
+          // Remove the static postUpdate propagation listener; replaced below
+          if (listenerRef.current) {
+            listenerRef.current()
+            listenerRef.current = null
+          }
+
+          // 2. Add primary satellite — cyan billboard
+          const primaryId  = `prim-${primaryTle.norad_id}`
+          const PRIMARY_IMG = makeSatelliteIcon('#22d3ee', 32)
+
+          if (primaryTle.tle_line1 && primaryTle.tle_line2) {
+            try {
+              dynMap[primaryId]  = satellite.twoline2satrec(primaryTle.tle_line1, primaryTle.tle_line2)
+              dynMeta[primaryId] = {
+                id:          primaryId,
+                name:        primaryTle.name,
+                type:        primaryTle.object_type === 'DEBRIS' ? 'debris' : 'satellite',
+                noradId:     Number(primaryTle.norad_id),
+                status:      'Active',
+                description: `Primary satellite under analysis — NORAD ${primaryTle.norad_id}`,
+                alt:         primaryTle.alt         ?? null,
+                inclination: primaryTle.inclination ?? null,
+                period:      primaryTle.period      ?? null,
+                country:     primaryTle.country     ?? null,
+                launched:    primaryTle.launched    ?? null,
+              }
+
+              entitiesRef.current[primaryId] = viewer.entities.add({
+                id:   primaryId,
+                name: primaryTle.name,
+                billboard: {
+                  image:            PRIMARY_IMG,
+                  width:            48,
+                  height:           48,
+                  verticalOrigin:   Cesium.VerticalOrigin.CENTER,
+                  horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+                  scaleByDistance:  new Cesium.NearFarScalar(5e5, 1.4, 2e7, 0.5),
+                  disableDepthTestDistance: 0,
+                },
+                point: {
+                  pixelSize:  4,
+                  color:      Cesium.Color.fromCssColorString('#22d3ee').withAlpha(0.4),
+                  disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                },
+                label: {
+                  text:        primaryTle.name,
+                  font:        'bold 13px Manrope, system-ui, sans-serif',
+                  fillColor:   Cesium.Color.fromCssColorString('#22d3ee').withAlpha(0.95),
+                  outlineColor: Cesium.Color.BLACK,
+                  outlineWidth: 3,
+                  style:       Cesium.LabelStyle.FILL_AND_OUTLINE,
+                  pixelOffset: new Cesium.Cartesian2(0, -28),
+                  scaleByDistance: new Cesium.NearFarScalar(5e5, 1, 6e6, 0),
+                  disableDepthTestDistance: 0,
+                },
+              })
+            } catch (e) {
+              console.warn('[_driftRenderConjunction] primary TLE parse failed:', e)
+            }
+          }
+
+          // 3. Add threat satellites — red / orange dots, deduplicated by norad_id
+          const seenIds = new Set()
+          threatTles.forEach((t, idx) => {
+            const key = String(t.norad_id)
+            if (seenIds.has(key) || !t.tle_line1 || !t.tle_line2) return
+            seenIds.add(key)
+
+            const threatId = `threat-${t.norad_id}`
+            const color    = idx % 2 === 0 ? '#f87171' : '#fb923c'
+
+            try {
+              dynMap[threatId]  = satellite.twoline2satrec(t.tle_line1, t.tle_line2)
+              dynMeta[threatId] = {
+                id:          threatId,
+                name:        t.name,
+                type:        t.object_type === 'DEBRIS' ? 'debris' : 'satellite',
+                noradId:     Number(t.norad_id),
+                status:      'Active',
+                description: `Conjunction threat satellite — NORAD ${t.norad_id}`,
+                alt:         t.alt         ?? null,
+                inclination: t.inclination ?? null,
+                country:     t.country     ?? null,
+                launched:    t.launched    ?? null,
+              }
+
+              entitiesRef.current[threatId] = viewer.entities.add({
+                id:   threatId,
+                name: t.name,
+                point: {
+                  pixelSize:    9,
+                  color:        Cesium.Color.fromCssColorString(color).withAlpha(0.9),
+                  outlineColor: Cesium.Color.fromCssColorString(color).withAlpha(0.35),
+                  outlineWidth: 3,
+                  scaleByDistance: new Cesium.NearFarScalar(1e6, 1.3, 2e7, 0.5),
+                  disableDepthTestDistance: 0,
+                },
+                label: {
+                  text:        t.name,
+                  font:        '11px Manrope, system-ui, sans-serif',
+                  fillColor:   Cesium.Color.fromCssColorString('#f4f7fb').withAlpha(0.7),
+                  outlineColor: Cesium.Color.BLACK,
+                  outlineWidth: 2,
+                  style:       Cesium.LabelStyle.FILL_AND_OUTLINE,
+                  pixelOffset: new Cesium.Cartesian2(0, -16),
+                  scaleByDistance: new Cesium.NearFarScalar(5e5, 1, 5e6, 0),
+                  disableDepthTestDistance: 0,
+                },
+              })
+            } catch (e) {
+              console.warn(`[_driftRenderConjunction] threat TLE parse failed (${t.name}):`, e)
+            }
+          })
+
+          // 4. New postUpdate listener — propagates only the dynamic set
+          listenerRef.current = viewer.scene.postUpdate.addEventListener(() => {
+            const now  = new Date()
+            const gmst = satellite.gstime(now)
+            Object.entries(dynMap).forEach(([id, satrec]) => {
+              try {
+                const pv = satellite.propagate(satrec, now)
+                if (!pv?.position) return
+                const geo = satellite.eciToGeodetic(pv.position, gmst)
+                const pos = Cesium.Cartesian3.fromRadians(geo.longitude, geo.latitude, geo.height * 1000)
+                const entity = entitiesRef.current[id]
+                if (entity) entity.position = pos
+              } catch (_) { /* skip malformed propagation */ }
+            })
+          })
+
+          // 5. Fly camera to primary satellite's current position
+          const primSatrec = dynMap[primaryId]
+          if (primSatrec) {
+            try {
+              const now = new Date()
+              const pv  = satellite.propagate(primSatrec, now)
+              if (pv?.position) {
+                const gmst = satellite.gstime(now)
+                const geo  = satellite.eciToGeodetic(pv.position, gmst)
+                viewer.camera.flyTo({
+                  destination: Cesium.Cartesian3.fromRadians(
+                    geo.longitude, geo.latitude,
+                    geo.height * 1000 + 3_000_000
+                  ),
+                  duration: 2.5,
+                })
+              }
+            } catch (e) {
+              console.warn('[_driftRenderConjunction] camera fly failed:', e)
+            }
+          }
         }
 
         // ── Globe styling ───────────────────────────────────────────────────
@@ -457,7 +642,7 @@ export default function GlobeView() {
           const picked = viewer.scene.pick(click.position)
           if (Cesium.defined(picked) && picked.id) {
             const entityId = picked.id.id ?? picked.id
-            const obj = ALL_OBJECTS.find(o => o.id === entityId)
+            const obj = ALL_OBJECTS.find(o => o.id === entityId) ?? dynMeta[entityId]
             if (obj) {
               const entity = entitiesRef.current[entityId]
 
@@ -479,14 +664,18 @@ export default function GlobeView() {
               const e = entitiesRef.current[entityId]
               if (e?.billboard) e.billboard.scale = 1.6
 
-              // Clear any previous trajectory from a prior selection
-              if (trajectoryRef.current) {
-                viewer.entities.remove(trajectoryRef.current)
-                trajectoryRef.current = null
+              // Clear any previous trajectory from a prior selection —
+              // but not while in analyze mode, so the orbit path and collision
+              // rings persist when the user clicks a different satellite to compare.
+              if (!analyzeModeRef.current) {
+                if (trajectoryRef.current) {
+                  viewer.entities.remove(trajectoryRef.current)
+                  trajectoryRef.current = null
+                }
+                riskEntitiesRef.current.forEach(re => viewer.entities.remove(re))
+                riskEntitiesRef.current = []
+                setRiskCount(0)
               }
-              riskEntitiesRef.current.forEach(re => viewer.entities.remove(re))
-              riskEntitiesRef.current = []
-              setRiskCount(0)
 
               setSelected(obj)
               satStore.select(obj)
@@ -508,7 +697,7 @@ export default function GlobeView() {
           const picked = viewer.scene.pick(move.endPosition)
           if (Cesium.defined(picked) && picked.id) {
             const entityId = picked.id.id ?? picked.id
-            const obj = ALL_OBJECTS.find(o => o.id === entityId)
+            const obj = ALL_OBJECTS.find(o => o.id === entityId) ?? dynMeta[entityId]
             if (obj) {
               viewer.scene.canvas.style.cursor = 'pointer'
               setHovered(obj.name)
@@ -593,7 +782,7 @@ export default function GlobeView() {
     const sat     = window.satellite
     if (!viewer || viewer.isDestroyed() || !Cesium || !sat || !selected) return
 
-    const satrec = satrecs.current[selected.id]
+    const satrec = satrecs.current[selected.id] ?? dynMapRef.current[selected.id]
     if (!satrec) return
 
     // Clear any previous analysis
@@ -637,21 +826,33 @@ export default function GlobeView() {
     const THRESHOLD = 700_000
     const atRisk    = new Set()
 
+    const inConjunctionMode = Object.keys(dynMapRef.current).length > 0
+
     positions.forEach(trajPos => {
-      DEBRIS_STATIC.forEach(deb => {
-        if (atRisk.has(deb.id)) return
-        const debPos = Cesium.Cartesian3.fromDegrees(deb.lon, deb.lat, deb.alt * 1000)
-        if (Cesium.Cartesian3.distance(trajPos, debPos) < THRESHOLD) atRisk.add(deb.id)
-      })
-      SAT_TLES.forEach(otherSat => {
-        if (otherSat.id === selected.id || atRisk.has(otherSat.id)) return
-        const otherPos = entitiesRef.current[otherSat.id]?.position?.getValue?.(Cesium.JulianDate.now())
-        if (otherPos && Cesium.Cartesian3.distance(trajPos, otherPos) < THRESHOLD) atRisk.add(otherSat.id)
-      })
+      if (inConjunctionMode) {
+        // In conjunction mode: check against the live dynamic threat satellites
+        Object.keys(dynMapRef.current).forEach(dynId => {
+          if (dynId === selected.id || atRisk.has(dynId)) return
+          const otherPos = entitiesRef.current[dynId]?.position?.getValue?.(Cesium.JulianDate.now())
+          if (otherPos && Cesium.Cartesian3.distance(trajPos, otherPos) < THRESHOLD) atRisk.add(dynId)
+        })
+      } else {
+        // Static mode: check against hardcoded debris + SAT_TLES
+        DEBRIS_STATIC.forEach(deb => {
+          if (atRisk.has(deb.id)) return
+          const debPos = Cesium.Cartesian3.fromDegrees(deb.lon, deb.lat, deb.alt * 1000)
+          if (Cesium.Cartesian3.distance(trajPos, debPos) < THRESHOLD) atRisk.add(deb.id)
+        })
+        SAT_TLES.forEach(otherSat => {
+          if (otherSat.id === selected.id || atRisk.has(otherSat.id)) return
+          const otherPos = entitiesRef.current[otherSat.id]?.position?.getValue?.(Cesium.JulianDate.now())
+          if (otherPos && Cesium.Cartesian3.distance(trajPos, otherPos) < THRESHOLD) atRisk.add(otherSat.id)
+        })
+      }
     })
 
-    // Guarantee at least 2 markers for demo realism
-    if (atRisk.size < 2) {
+    // Guarantee at least 2 markers for demo realism — only in static mode
+    if (!inConjunctionMode && atRisk.size < 2) {
       const pool = [...DEBRIS_STATIC, ...SAT_TLES.filter(s => s.id !== selected.id)]
       pool.sort(() => Math.random() - 0.5).slice(0, 2 - atRisk.size).forEach(o => atRisk.add(o.id))
     }
@@ -678,13 +879,27 @@ export default function GlobeView() {
 
     // ── Draw trajectories for each at-risk object ──────────────────────────
     atRisk.forEach(riskId => {
-      const satObj = SAT_TLES.find(s => s.id === riskId)
-      const debObj = DEBRIS_STATIC.find(d => d.id === riskId)
+      const satObj    = SAT_TLES.find(s => s.id === riskId)
+      const debObj    = DEBRIS_STATIC.find(d => d.id === riskId)
+      const dynSatrec = dynMapRef.current[riskId]
 
       let riskPositions = []
 
-      if (satObj) {
-        // Propagate via TLE — same approach as selected satellite
+      if (dynSatrec) {
+        // Dynamic threat satellite — propagate one orbital period using the same
+        // approach as the primary satellite orbit drawing
+        const threatPeriod = dynMetaRef.current[riskId]?.period ?? 90
+        const STEPS = 90
+        for (let i = 0; i <= STEPS; i++) {
+          const t    = new Date(now.getTime() + (i / STEPS) * threatPeriod * 60 * 1000)
+          const gmst = sat.gstime(t)
+          const pv   = sat.propagate(dynSatrec, t)
+          if (!pv?.position) continue
+          const geo  = sat.eciToGeodetic(pv.position, gmst)
+          riskPositions.push(Cesium.Cartesian3.fromRadians(geo.longitude, geo.latitude, geo.height * 1000))
+        }
+      } else if (satObj) {
+        // Static satellite — propagate via TLE
         const rSatrec = satrecs.current[satObj.id]
         if (rSatrec) {
           const STEPS = 90
@@ -704,7 +919,7 @@ export default function GlobeView() {
 
       if (riskPositions.length < 2) return
 
-      const isSat   = !!satObj
+      const isSat   = !!(satObj || dynSatrec)
       const color   = isSat ? '#ef4444' : '#f97316'
       const opacity = 0.55
 
