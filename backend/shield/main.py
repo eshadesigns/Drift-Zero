@@ -47,6 +47,7 @@ from backend.shield.propagate import parse_satrec
 from backend.shield.tca import find_tca
 from backend.shield.probability import compute_probability
 from backend.shield.maneuver import compute_maneuvers
+from backend.shield.cascade import compute_cascade, LABEL_SLUGS
 
 # ── Config ────────────────────────────────────────────────────────────────────
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
@@ -601,6 +602,15 @@ def run_pipeline(
     sat_by_norad    = {r.get("NORAD_CAT_ID"): s for r, s in parsed_catalog}
     catalog_records = [r for r, _ in parsed_catalog]
 
+    # Store pipeline state for cascade analysis
+    _pipeline_cache[norad_id] = {
+        "primary_rec":     primary_rec,
+        "primary_sat":     primary_sat,
+        "catalog_records": catalog_records,
+        "sat_by_norad":    sat_by_norad,
+        "t_start":         t_start,
+    }
+
     # 4. Screen primary against catalog
     log.info("Screening %s against %d catalog objects...", primary_name, len(catalog_records))
     candidates = _screen_catalog(primary_rec, catalog_records)
@@ -701,6 +711,10 @@ app = FastAPI(title="Drift Zero -- Shield API", version="0.2.0")
 # No expiry needed for demo use.
 _conjunction_cache: dict[int, list[dict]] = {}
 
+# Pipeline state cache: norad_id -> {primary_rec, primary_sat, catalog_records,
+# sat_by_norad, t_start}. Populated by run_pipeline(); read by GET /cascade.
+_pipeline_cache: dict[int, dict] = {}
+
 
 @app.get("/satellite/{norad_id}")
 async def get_satellite(norad_id: int):
@@ -790,6 +804,84 @@ async def get_conjunctions(
         "returned":       min(len(filtered), limit),
         "events":         filtered[:limit],
     }
+
+
+@app.get("/cascade/{norad_id}/{event_id}/{maneuver_label}")
+async def get_cascade(norad_id: int, event_id: str, maneuver_label: str):
+    """
+    Compute downstream conjunction risks introduced or worsened by a maneuver.
+
+    maneuver_label must be one of: maximum_safety, balanced, fuel_efficient.
+
+    Requires that GET /conjunctions/{norad_id} has been called first to populate
+    the conjunction cache and pipeline state cache.
+    Returns 409 if either cache is empty.
+    """
+    valid_labels = set(LABEL_SLUGS.keys())
+    if maneuver_label not in valid_labels:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Invalid maneuver_label {maneuver_label!r}. "
+                f"Must be one of: {sorted(valid_labels)}"
+            ),
+        )
+
+    events = _conjunction_cache.get(norad_id)
+    if events is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"No conjunction data cached for NORAD {norad_id}. "
+                f"Call GET /conjunctions/{norad_id} first."
+            ),
+        )
+
+    pipeline = _pipeline_cache.get(norad_id)
+    if pipeline is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"No pipeline state cached for NORAD {norad_id}. "
+                f"Call GET /conjunctions/{norad_id} first."
+            ),
+        )
+
+    event = next((e for e in events if e["event_id"] == event_id), None)
+    if event is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Event {event_id!r} not found in cached results for NORAD {norad_id}",
+        )
+
+    # Resolve slug -> display label and build a minimal maneuver dict
+    display_label = LABEL_SLUGS[maneuver_label]
+    maneuvers_result = compute_maneuvers(event)
+    maneuver = next(
+        (m for m in maneuvers_result["maneuver_options"] if m["label"] == display_label),
+        None,
+    )
+    if maneuver is None:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not find maneuver option {display_label!r} in computed options",
+        )
+
+    try:
+        result = compute_cascade(
+            event=event,
+            maneuver=maneuver,
+            primary_rec=pipeline["primary_rec"],
+            primary_sat=pipeline["primary_sat"],
+            catalog_records=pipeline["catalog_records"],
+            sat_by_norad=pipeline["sat_by_norad"],
+            original_events=events,
+            t_start=pipeline["t_start"],
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return result
 
 
 # ── CLI entry-point ───────────────────────────────────────────────────────────
