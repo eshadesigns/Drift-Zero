@@ -8,7 +8,7 @@ import LandingOverlay from './components/LandingOverlay.jsx'
 function App() {
   const [activated, setActivated] = useState(false)
   const [landingMounted, setLandingMounted] = useState(true)
-  const [activeNoradId, setActiveNoradId] = useState(25544)
+  const [trackedNoradId, setTrackedNoradId] = useState(null)
 
   // Hide entities + start globe rotation on load, stop on activate
   useEffect(() => {
@@ -50,8 +50,10 @@ function App() {
     // Zoom to satellite if a NORAD ID was entered
     if (noradId) {
       setTimeout(() => window._driftFocusSat?.(noradId), 100)
-      setActiveNoradId(Number(noradId))
     }
+    // Store the entered NORAD ID so DashboardOverlay can run the pipeline for it
+    const parsed = parseInt(noradId, 10)
+    if (!isNaN(parsed) && parsed > 0) setTrackedNoradId(parsed)
     setActivated(true)
     // Unmount landing after transition fully completes
     setTimeout(() => setLandingMounted(false), 1000)
@@ -75,7 +77,7 @@ function App() {
 
       {/* Dashboard — slides in after activation */}
       <StrictMode>
-        <DashboardOverlay activated={activated} noradId={activeNoradId} />
+        <DashboardOverlay activated={activated} noradId={trackedNoradId} />
       </StrictMode>
 
       {/* Mask GlobeView's own UI chrome during landing */}
