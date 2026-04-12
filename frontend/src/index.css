@@ -1,17 +1,10 @@
-@font-face {
-  font-family: 'Space Grotesk';
-  src: url('/Space_Grotesk/SpaceGrotesk-VariableFont_wght.ttf') format('truetype');
-  font-weight: 100 900;
-  font-display: swap;
-}
-
 *, *::before, *::after { box-sizing: border-box; }
 
 body {
   margin: 0;
   padding: 0;
   background: #000;
-  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
   color: #94a3b8;
   -webkit-font-smoothing: antialiased;
 }
