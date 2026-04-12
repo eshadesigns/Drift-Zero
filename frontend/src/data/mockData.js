@@ -637,3 +637,113 @@ export const demoGlobeObjects = [
   { id: 'DEMO_DEB_19', name: 'SL-14 R/B DEB',       type: 'debris', lat: -50, lon: 170, alt: 830 },
   { id: 'DEMO_DEB_20', name: 'MOLNIYA DEB',         type: 'debris', lat:  65, lon:  20, alt: 620 },
 ]
+
+// ─── MOCK ROGUE EVENTS (adversarial / suspicious satellites per focused sat) ──
+// Keyed by GlobeView entity ID. Format matches RoguePanel's live API shape.
+export const mockRogueEvents = {
+  "ISS": [
+    {
+      norad_id: 48915,
+      name: "COSMOS 2571 (LUCH-5X)",
+      severity: "ADVERSARIAL",
+      composite_score: 0.912,
+      epoch: "2026-04-11T18:00:00Z",
+      summary: "Russian relay satellite conducting pattern-of-life monitoring of ISS. Object has maneuvered 14 times in 90 days maintaining 8–12 km trailing distance. Consistent with known Russian inspector behavior documented in 2022–2024 ESA reports.",
+      anomalous_features: ["proximity_approach", "persistent_co_orbital", "repeated_maneuvers", "attitude_anomaly"]
+    },
+    {
+      norad_id: 57161,
+      name: "SHIJIAN-21B",
+      severity: "SUSPICIOUS",
+      composite_score: 0.647,
+      epoch: "2026-04-10T12:00:00Z",
+      summary: "Chinese experimental satellite that executed 3 burns in 7 days moving from GEO to a lower transfer orbit. Current trajectory intercepts ISS orbital band within 72 hours. Mission is uncharacterized.",
+      anomalous_features: ["unexpected_maneuvers", "orbit_change", "unregistered_mission"]
+    }
+  ],
+  "SL1": [
+    {
+      norad_id: 55343,
+      name: "KOSMOS-2576",
+      severity: "ADVERSARIAL",
+      composite_score: 0.881,
+      epoch: "2026-04-11T20:00:00Z",
+      summary: "Russian inspector satellite maintaining ~3 km separation from STARLINK-1007 for 18 days. Matches signature of Kosmos nesting-doll class capable of releasing sub-payloads. Pattern matches adversarial rendezvous documented against Starlink Group 4-2 in 2024.",
+      anomalous_features: ["persistent_co_orbital", "proximity_approach", "inspector_class", "sub_payload_capable"]
+    },
+    {
+      norad_id: 58821,
+      name: "OBJECT 58821 (UNCAT.)",
+      severity: "SUSPICIOUS",
+      composite_score: 0.534,
+      epoch: "2026-04-09T08:00:00Z",
+      summary: "Uncatalogued object detected by LeoLabs radar at 551 km, 53° inclination — co-orbital with STARLINK-1007. No launch registration. Estimated cross-section consistent with CubeSat.",
+      anomalous_features: ["unregistered_launch", "co_orbital", "unknown_origin"]
+    }
+  ],
+  "SL2": [
+    {
+      norad_id: 55343,
+      name: "KOSMOS-2576",
+      severity: "SUSPICIOUS",
+      composite_score: 0.612,
+      epoch: "2026-04-11T14:00:00Z",
+      summary: "Same Russian inspector satellite (KOSMOS-2576) widening surveillance arc to cover both STARLINK-1007 and STARLINK-2055. Current range to SL2 is approximately 18 km. Consistent with dual-target observation pattern.",
+      anomalous_features: ["proximity_approach", "multi_target_surveillance", "inspector_class"]
+    }
+  ],
+  "NOAA18": [
+    {
+      norad_id: 37214,
+      name: "FENGYUN-3D",
+      severity: "SUSPICIOUS",
+      composite_score: 0.598,
+      epoch: "2026-04-10T06:00:00Z",
+      summary: "Chinese weather satellite in adjacent sun-synchronous orbit. Executed 2 unannounced maneuvers narrowing separation from 45 km to 12 km over 30 days. FY-3D carries imaging payload with resolution potentially applicable to signals intelligence.",
+      anomalous_features: ["unannounced_maneuvers", "narrowing_separation", "dual_use_payload"]
+    }
+  ],
+  "TERRA": [
+    {
+      norad_id: 59012,
+      name: "YAOGAN-41",
+      severity: "ADVERSARIAL",
+      composite_score: 0.857,
+      epoch: "2026-04-11T16:00:00Z",
+      summary: "Chinese reconnaissance satellite co-orbiting with Terra at 5.2 km separation for 22 consecutive days with no orbital evolution — implying active station-keeping. Terra's MODIS and MISR sensors serve US military environmental intelligence. This proximity is anomalous and unprecedented for this object class.",
+      anomalous_features: ["active_station_keeping", "persistent_co_orbital", "intelligence_target", "zero_natural_drift"]
+    },
+    {
+      norad_id: 56781,
+      name: "OBJECT 56781 (UNCAT.)",
+      severity: "SUSPICIOUS",
+      composite_score: 0.501,
+      epoch: "2026-04-08T10:00:00Z",
+      summary: "Small unregistered object detected at 712 km, 98.1° inclination — within Terra's orbital shell. Origin unknown. Could be fragment or intentionally deployed micro-satellite.",
+      anomalous_features: ["unregistered_object", "co_orbital_shell", "unknown_origin"]
+    }
+  ],
+  "METOP": [
+    {
+      norad_id: 43566,
+      name: "LOTOS-S1",
+      severity: "ADVERSARIAL",
+      composite_score: 0.778,
+      epoch: "2026-04-11T10:00:00Z",
+      summary: "Russian ELINT satellite maintaining 22 km co-orbital distance from MetOp-A for 41 days. MetOp carries ASCAT and IASI instruments sharing data with NATO meteorological centers. LOTOS-S1 class is known to intercept downlink signals from target satellites.",
+      anomalous_features: ["elint_class", "signal_interception", "persistent_co_orbital", "nato_asset_target"]
+    }
+  ],
+  "HST": [],
+  "AQUA": [
+    {
+      norad_id: 43567,
+      name: "ZIYUAN-3C",
+      severity: "SUSPICIOUS",
+      composite_score: 0.442,
+      epoch: "2026-04-09T14:00:00Z",
+      summary: "Chinese land survey satellite that executed a 0.4 m/s maneuver 6 days ago reducing separation from Aqua to 28 km. No operational justification given ZY-3C's stated mapping mission.",
+      anomalous_features: ["unexplained_maneuver", "narrowing_separation"]
+    }
+  ]
+}
