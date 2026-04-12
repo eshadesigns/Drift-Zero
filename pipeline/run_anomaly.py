@@ -241,6 +241,7 @@ def events_to_df(events: list[AnomalyEvent]) -> pd.DataFrame:
             "iso_score":         round(e.iso_score, 6),
             "proximity_flag":    e.proximity_flag,
             "anomalous_features": json.dumps(e.anomalous_features),
+            "intent_label":      e.intent_label,
             "description":       e.description,
         })
     return pd.DataFrame(records)

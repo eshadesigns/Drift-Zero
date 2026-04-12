@@ -5,7 +5,14 @@ import ManeuverPanel from './components/dashboard/ManeuverPanel'
 import NaturalLanguageAlert from './components/dashboard/NaturalLanguageAlert'
 import CascadeAnalysis from './components/dashboard/CascadeAnalysis'
 import SatelliteModal from './components/SatelliteModal'
+import RoguePanel from './components/RoguePanel'
 import { satStore } from './satStore'
+import { fetchConjunctions } from './api/shield'
+import {
+  conjunctions as mockConjunctions,
+  fleetStats as mockFleetStats,
+  naturalLanguageAlerts as mockAlerts,
+} from './data/mockData'
 
 const PANEL_MIN = 15   // % of screen width
 const PANEL_MAX = 55
@@ -25,7 +32,7 @@ export default function DashboardOverlay({ activated = false }) {
   }, [activated])
   const [isDragging, setIsDragging] = useState(false)
   const [dividerHover, setDividerHover] = useState(false)
-  const tabDragMoved = useRef(false) // tracks whether tab mousedown became a drag
+  const tabDragMoved = useRef(false)
 
   // ── Satellite selection from GlobeView ────────────────────────────────────
   const [selectedSat, setSelectedSat] = useState(null)
@@ -103,7 +110,7 @@ export default function DashboardOverlay({ activated = false }) {
         transform: activated ? 'translateY(0)' : 'translateY(-100%)',
         transition: 'opacity 0.5s ease 0.4s, transform 0.5s ease 0.4s',
       }}>
-        <StatsBar />
+        <StatsBar stats={stats} isLive={isLive} />
       </div>
 
       {/* ── Right panel ──────────────────────────────────────────────────────── */}
@@ -131,8 +138,6 @@ export default function DashboardOverlay({ activated = false }) {
           flexDirection: 'column',
         }}>
           {selectedSat ? (
-            /* ── Satellite selected: show satellite info panel ── */
-            /* key forces remount + re-animation on each new satellite */
             <SatelliteModal
               key={selectedSat.id}
               sat={selectedSat}
@@ -143,19 +148,71 @@ export default function DashboardOverlay({ activated = false }) {
               inline
             />
           ) : (
-            /* ── Default: conjunction queue + detail panels ── */
             <>
-              <AlertQueue
-                selected={selectedConjunction}
-                onSelect={setSelectedConjunction}
-              />
-              {selectedConjunction && (
-                <>
-                  <NaturalLanguageAlert conjunction={selectedConjunction} />
-                  <ManeuverPanel conjunction={selectedConjunction} />
-                  <CascadeAnalysis conjunction={selectedConjunction} />
-                </>
-              )}
+              {/* ── Mode tab bar — sticky so it stays visible while scrolling ── */}
+              <div style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+                display: 'flex',
+                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                background: 'rgba(3,7,18,0.97)',
+                flexShrink: 0,
+              }}>
+                {['shield', 'rogue'].map(mode => {
+                  const active = activeMode === mode
+                  return (
+                    <button
+                      key={mode}
+                      onClick={() => {
+                        setActiveMode(mode)
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '9px 0',
+                        background: 'none',
+                        border: 'none',
+                        borderBottom: active
+                          ? '2px solid #22d3ee'
+                          : '2px solid transparent',
+                        color: active ? '#22d3ee' : '#475569',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        letterSpacing: '0.12em',
+                        textTransform: 'uppercase',
+                        cursor: 'pointer',
+                        transition: 'color 0.15s, border-color 0.15s',
+                      }}
+                    >
+                      {mode}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* ── Mode content ─────────────────────────────────────────────── */}
+              {/* Both panels stay mounted — display:none preserves fetched data
+                  across tab switches and prevents duplicate API/Claude calls. */}
+              <div style={{ display: activeMode === 'shield' ? 'contents' : 'none' }}>
+                <AlertQueue
+                  conjunctions={conjunctions}
+                  selected={selectedConjunction}
+                  onSelect={setSelectedConjunction}
+                />
+                {selectedConjunction && (
+                  <>
+                    <NaturalLanguageAlert
+                      conjunction={selectedConjunction}
+                      alerts={alerts}
+                    />
+                    <ManeuverPanel conjunction={selectedConjunction} />
+                    <CascadeAnalysis conjunction={selectedConjunction} />
+                  </>
+                )}
+              </div>
+              <div style={{ display: activeMode === 'rogue' ? 'contents' : 'none' }}>
+                <RoguePanel />
+              </div>
             </>
           )}
         </div>
@@ -184,17 +241,14 @@ export default function DashboardOverlay({ activated = false }) {
               : 'transparent',
         }}
       >
-        {/* Always-visible collapse/expand tab */}
         <button
           onMouseDown={(e) => {
             e.stopPropagation()
             tabDragMoved.current = false
-            // Start the drag — if mouse never moves, we treat it as a click
             setIsDragging(true)
             setCollapsed(null)
           }}
           onClick={(e) => {
-            // Only toggle if the mousedown didn't turn into a real drag
             if (!tabDragMoved.current) toggleCollapse()
           }}
           style={{
@@ -231,7 +285,6 @@ export default function DashboardOverlay({ activated = false }) {
         </button>
       </div>
 
-      {/* Cursor style during drag */}
       {isDragging && (
         <style>{`* { cursor: col-resize !important; user-select: none !important; }`}</style>
       )}

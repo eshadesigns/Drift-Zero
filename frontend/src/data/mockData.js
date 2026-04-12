@@ -4,7 +4,7 @@
 
 // ─── FLEET STATS (top of StatsBar) ───────────────────────────────────────────
 export const fleetStats = {
-  activeSatellites: 142,
+  activeSatellites: 6547,
   activeConjunctions: 7,
   criticalAlerts: 2,
   avgCollisionProb: 0.00031,   // realistic LEO average per NASA CARA data
