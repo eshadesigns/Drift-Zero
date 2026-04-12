@@ -37,8 +37,8 @@ from typing import Optional
 import numpy as np
 from sgp4.api import Satrec, WGS84, jday as _jday
 
-from backend.shield.propagate import propagate_at
-from backend.shield.tca import find_tca
+from shield.propagate import propagate_at
+from shield.tca import find_tca
 
 # ── Physical constants ────────────────────────────────────────────────────────
 MU_KM3_S2       = 398600.4418   # Earth gravitational parameter, km³/s²

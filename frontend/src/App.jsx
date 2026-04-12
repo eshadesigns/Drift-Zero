@@ -14,7 +14,20 @@ const PANEL_MIN = 15   // % of screen width
 const PANEL_MAX = 55
 const DEFAULT_PANEL = 30
 
-export default function DashboardOverlay({ activated = false, noradId = 25544 }) {
+// Maps NORAD IDs to the primarySatId strings used in conjunctions
+// Must match GlobeView.jsx SAT_TLES entity IDs exactly
+const NORAD_TO_SAT_ID = {
+  25544: 'ISS',
+  20580: 'HST',
+  44713: 'SL1',
+  47526: 'SL2',
+  28654: 'NOAA18',
+  25994: 'TERRA',
+  29499: 'METOP',
+  27424: 'AQUA',
+}
+
+export default function DashboardOverlay({ activated = false, noradId = 25544, demo = false, showAll = false }) {
   const [activeMode, setActiveMode] = useState('shield')   // 'shield' | 'rogue'
   const [selectedConjunction, setSelectedConjunction] = useState(null)
   const [selectedManeuver, setSelectedManeuver] = useState(null)  // slug for cascade
@@ -33,6 +46,14 @@ export default function DashboardOverlay({ activated = false, noradId = 25544 })
     setConjunctions([])
     setSelectedConjunction(null)
     setIsLive(false)
+
+    if (demo) {
+      setConjunctions(mockConjunctions ?? [])
+      setIsLive(false)
+      setConjunctionsLoading(false)
+      setStats(mockFleetStats)
+      return
+    }
 
     const controller = new AbortController()
     fetchConjunctions(noradId, { minRisk: 0, limit: 100 }, controller.signal)
@@ -58,7 +79,7 @@ export default function DashboardOverlay({ activated = false, noradId = 25544 })
       cancelled = true
       controller.abort()
     }
-  }, [noradId])
+  }, [noradId, demo])
 
   // Slide panels in after activation
   useEffect(() => {
@@ -87,6 +108,22 @@ export default function DashboardOverlay({ activated = false, noradId = 25544 })
 
   const handleSatClose = useCallback(() => { satStore.onClose?.() }, [])
   const handleSatAnalyze = useCallback(() => { satStore.onAnalyze?.() }, [])
+
+  // ── Conjunction filtering ─────────────────────────────────────────────────
+  // Determine which satellite's conjunctions to show:
+  //   • selectedSat (clicked from globe) takes priority — match by entity id
+  //   • otherwise use noradId (from Track input) mapped to primarySatId
+  const focusedSatId = selectedSat?.id || NORAD_TO_SAT_ID[noradId] || null
+
+  const filteredConjunctions = (showAll || !focusedSatId)
+    ? conjunctions
+    : conjunctions.filter(c => c.primarySatId === focusedSatId)
+
+  // Reset selected conjunction when the focus changes to avoid stale state
+  useEffect(() => {
+    setSelectedConjunction(null)
+    setSelectedManeuver(null)
+  }, [focusedSatId, showAll])
 
   // ── Drag-to-resize ──────────────────────────────────────────────────────────
   const onDividerMouseDown = useCallback((e) => {
@@ -168,15 +205,44 @@ export default function DashboardOverlay({ activated = false, noradId = 25544 })
           flexDirection: 'column',
         }}>
           {selectedSat ? (
-            <SatelliteModal
-              key={selectedSat.id}
-              sat={selectedSat}
-              onClose={handleSatClose}
-              onAnalyze={handleSatAnalyze}
-              analyzed={satAnalyzed}
-              riskCount={satRiskCount}
-              inline
-            />
+            /* ── Satellite selected from globe: show modal + its conjunctions ── */
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+              <SatelliteModal
+                key={selectedSat.id}
+                sat={selectedSat}
+                onClose={handleSatClose}
+                onAnalyze={handleSatAnalyze}
+                analyzed={satAnalyzed}
+                riskCount={satRiskCount}
+                inline
+              />
+              {/* Divider */}
+              <div style={{ margin: '0 10px', borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: '#334155', textTransform: 'uppercase', paddingLeft: 4 }}>
+                  Conjunction Events
+                </span>
+              </div>
+              <AlertQueue
+                conjunctions={filteredConjunctions}
+                loading={conjunctionsLoading}
+                selected={selectedConjunction}
+                onSelect={(c) => { setSelectedConjunction(c); setSelectedManeuver(null) }}
+              />
+              {selectedConjunction && (
+                <>
+                  <NaturalLanguageAlert conjunction={selectedConjunction} />
+                  <ManeuverPanel
+                    conjunction={selectedConjunction}
+                    demo={demo}
+                    onSelectManeuver={setSelectedManeuver}
+                  />
+                  <CascadeAnalysis
+                    conjunction={selectedConjunction}
+                    selectedManeuver={selectedManeuver}
+                  />
+                </>
+              )}
+            </div>
           ) : (
             <>
               {/* ── Mode tab bar ──────────────────────────────────────────────── */}
@@ -221,7 +287,7 @@ export default function DashboardOverlay({ activated = false, noradId = 25544 })
                 overflowX: 'hidden',
               }}>
                 <AlertQueue
-                  conjunctions={conjunctions}
+                  conjunctions={filteredConjunctions}
                   loading={conjunctionsLoading}
                   selected={selectedConjunction}
                   onSelect={(c) => { setSelectedConjunction(c); setSelectedManeuver(null) }}
@@ -231,6 +297,7 @@ export default function DashboardOverlay({ activated = false, noradId = 25544 })
                     <NaturalLanguageAlert conjunction={selectedConjunction} />
                     <ManeuverPanel
                       conjunction={selectedConjunction}
+                      demo={demo}
                       onSelectManeuver={setSelectedManeuver}
                     />
                     <CascadeAnalysis

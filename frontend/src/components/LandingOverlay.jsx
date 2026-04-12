@@ -39,7 +39,12 @@ export default function LandingOverlay({ onActivate }) {
   const handleSubmit = (e) => {
     e?.preventDefault()
     setPhase('dissolving')
-    setTimeout(() => onActivate(satId.trim()), 900)
+    setTimeout(() => onActivate(satId.trim(), false), 900)
+  }
+
+  const handleDemo = () => {
+    setPhase('dissolving')
+    setTimeout(() => onActivate('25544', true), 900)
   }
 
   const dissolving = phase === 'dissolving'
@@ -180,13 +185,29 @@ export default function LandingOverlay({ onActivate }) {
             </button>
           </form>
 
-          <p style={{
-            marginTop: 12, fontSize: 11,
-            color: '#334155',
-            fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace",
-          }}>
-            Press Enter to load all assets
-          </p>
+          <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              onClick={handleDemo}
+              style={{
+                padding: '10px 18px',
+                borderRadius: 8,
+                background: 'transparent',
+                border: '1px solid rgba(99,102,241,0.4)',
+                color: '#818cf8',
+                fontSize: 12, fontWeight: 700, letterSpacing: '0.08em',
+                cursor: 'pointer', textTransform: 'uppercase',
+                fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace",
+                transition: 'border-color 0.15s, color 0.15s, background 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background='rgba(99,102,241,0.1)'; e.currentTarget.style.borderColor='rgba(99,102,241,0.7)' }}
+              onMouseLeave={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.borderColor='rgba(99,102,241,0.4)' }}
+            >
+              ◈ Demo Mode
+            </button>
+            <span style={{ fontSize: 11, color: '#334155', fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace" }}>
+              or press Enter to track
+            </span>
+          </div>
 
         </div>
       </div>
