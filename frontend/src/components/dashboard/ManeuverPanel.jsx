@@ -186,7 +186,7 @@ function computeManeuverOptions(conjunction, orbParams) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ManeuverPanel({ conjunction, demo = false, onSelectManeuver }) {
+export default function ManeuverPanel({ conjunction, demo = false, onSelectManeuver, showDebrisOrbits = true }) {
   const [options, setOptions]   = useState(null)
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState(null)
@@ -311,7 +311,7 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
       }
 
       // ── Secondary / threat orbit (orange = uncontrolled debris, red = sat) ──
-      if (secOrb) {
+      if (secOrb && showDebrisOrbits) {
         const secIsSat   = !!SAT_ORBIT_PARAMS[secondarySatId]   // maneuverable satellite?
         const secColor   = secIsSat ? '#ef4444' : '#f97316'
         const secPositions = secOrb.tle1 && sat
@@ -361,7 +361,7 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
     } catch (e) {
       console.warn('ManeuverPanel: orbit draw error', e)
     }
-  }, [demo, eventId, conjunction?.primarySatId, conjunction?.secondarySatId])
+  }, [demo, eventId, conjunction?.primarySatId, conjunction?.secondarySatId, showDebrisOrbits])
 
   // ── Draw original + post-maneuver orbits when option selected ───────────────
   useEffect(() => {

@@ -38,7 +38,7 @@ function SectionHeader({ label, count, countColor }) {
   )
 }
 
-export default function RoguePanel({ visible, demo = false, focusedSatId = null, compact = false }) {
+export default function RoguePanel({ visible, demo = false, focusedSatId = null, compact = false, selectedRogue = null }) {
   const [events, setEvents]     = useState([])
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState(null)
@@ -150,12 +150,15 @@ export default function RoguePanel({ visible, demo = false, focusedSatId = null,
             </div>
           ) : events.map((ev, i) => {
             const color = SEV_COLOR[ev.severity] ?? '#94a3b8'
+            const isSelected = selectedRogue && ev.name === selectedRogue.name
             return (
               <div key={i} style={{
-                background: 'rgba(255,255,255,0.03)',
-                border: `1px solid ${color}33`,
+                background: isSelected ? `${color}12` : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${isSelected ? color : color + '33'}`,
                 borderRadius: 8, padding: '10px 12px',
                 display: 'flex', flexDirection: 'column', gap: 5,
+                boxShadow: isSelected ? `0 0 12px ${color}44` : 'none',
+                transition: 'all 0.2s',
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{
@@ -166,6 +169,14 @@ export default function RoguePanel({ visible, demo = false, focusedSatId = null,
                   <span style={{ fontSize: 12, color: '#e2e8f0', fontWeight: 600 }}>
                     {ev.name ?? `NORAD ${ev.norad_id}`}
                   </span>
+                  {isSelected && (
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, color,
+                      background: `${color}18`, border: `1px solid ${color}55`,
+                      borderRadius: 3, padding: '1px 6px', letterSpacing: '0.08em',
+                      flexShrink: 0,
+                    }}>● SELECTED ON GLOBE</span>
+                  )}
                   <span style={{ fontSize: 10, color: '#64748b', marginLeft: 'auto' }}>
                     score {ev.composite_score?.toFixed(3)}
                   </span>

@@ -659,6 +659,15 @@ export const mockRogueEvents = {
       epoch: "2026-04-10T12:00:00Z",
       summary: "Chinese experimental satellite that executed 3 burns in 7 days moving from GEO to a lower transfer orbit. Current trajectory intercepts ISS orbital band within 72 hours. Mission is uncharacterized.",
       anomalous_features: ["unexpected_maneuvers", "orbit_change", "unregistered_mission"]
+    },
+    {
+      norad_id: 61234,
+      name: "SHIJIAN-23 (PROXIMITY)",
+      severity: "SUSPICIOUS",
+      composite_score: 0.721,
+      epoch: "2026-04-11T22:00:00Z",
+      summary: "Chinese experimental satellite at 422 km altitude locked to ISS orbital plane — current separation approximately 2.1 km. No maneuver declared. Maintaining this proximity for 9 consecutive days with active station-keeping signature. Within sensor interference range of ISS communications systems.",
+      anomalous_features: ["proximity_approach", "orbit_matching", "active_station_keeping", "unannounced_approach"]
     }
   ],
   "SL1": [
@@ -986,8 +995,10 @@ export const mockIncidents = [
 // Added to globe in demo mode by main.jsx — same mechanism as demoGlobeObjects.
 export const rogueActorPositions = [
   // Near ISS (421km, 51.6°)
-  { id: 'ROGUE_01', name: 'COSMOS 2571 (LUCH-5X)', type: 'rogue', severity: 'ADVERSARIAL', targetId: 'ISS', lat:  32, lon:  18, alt: 429 },
-  { id: 'ROGUE_02', name: 'SHIJIAN-21B',           type: 'rogue', severity: 'SUSPICIOUS',  targetId: 'ISS', lat:  20, lon: -76, alt: 430 },
+  { id: 'ROGUE_01', name: 'COSMOS 2571 (LUCH-5X)',  type: 'rogue', severity: 'ADVERSARIAL', targetId: 'ISS', lat:  32, lon:  18, alt: 429 },
+  { id: 'ROGUE_02', name: 'SHIJIAN-21B',            type: 'rogue', severity: 'SUSPICIOUS',  targetId: 'ISS', lat:  20, lon: -76, alt: 430 },
+  // DEMO: SHIJIAN-23 placed at 422 km — only 1 km above ISS, same inclination → orbit nearly overlaps ISS on globe
+  { id: 'ROGUE_10', name: 'SHIJIAN-23 (PROXIMITY)', type: 'rogue', severity: 'SUSPICIOUS',  targetId: 'ISS', lat:  48, lon:  15, alt: 422 },
   // Near SL1/SL2 (551km, 53°)
   { id: 'ROGUE_03', name: 'KOSMOS-2576',           type: 'rogue', severity: 'ADVERSARIAL', targetId: 'SL1', lat:  46, lon:  36, alt: 554 },
   { id: 'ROGUE_04', name: 'OBJECT 58821 (UNCAT.)', type: 'rogue', severity: 'SUSPICIOUS',  targetId: 'SL1', lat:  53, lon: 122, alt: 551 },

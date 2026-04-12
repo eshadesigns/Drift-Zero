@@ -21,12 +21,16 @@ const NORAD_TO_ENTITY_ID = {
 
 // All entity IDs that belong to GlobeView (sats + debris)
 // ManeuverPanel/analysis entities have auto-generated UUID ids and won't match these
+// NOTE: rogue actor IDs (ROGUE_*) are intentionally excluded — their visibility is
+// controlled entirely by DashboardOverlay during conjunction analysis.
 const GLOBE_ENTITY_IDS = new Set([
   'ISS', 'HST', 'SL1', 'SL2', 'NOAA18', 'TERRA', 'METOP', 'AQUA',
   ...Array.from({ length: 28 }, (_, i) => `DEB${i + 1}`),
   ...demoGlobeObjects.map(o => o.id),
-  ...rogueActorPositions.map(o => o.id),
 ])
+
+// Debris entity IDs (static DEB1-DEB28 + demo DEMO_DEB_* objects)
+const isDebrisId = (id) => /^DEB\d+$/.test(id) || id.startsWith('DEMO_DEB_')
 
 function App() {
   const [activated, setActivated] = useState(false)
@@ -37,6 +41,7 @@ function App() {
   const [showAllSats, setShowAllSats] = useState(false)
   const demoEntitiesRef = useRef([])
   const rogueEntitiesRef = useRef([])
+  const selectedRogueIdRef = useRef(null)  // currently highlighted rogue entity ID
 
   // Hide entities + start globe rotation on load, stop on activate
   useEffect(() => {
@@ -75,8 +80,8 @@ function App() {
     const viewer = window._driftViewer
     if (!viewer || viewer.isDestroyed()) return
     viewer.entities.values.forEach(e => {
-      if (!GLOBE_ENTITY_IDS.has(e.id)) return // leave ManeuverPanel/analysis entities alone
-      e.show = showAllSats || !focusedEntityId || e.id === focusedEntityId
+      if (!GLOBE_ENTITY_IDS.has(e.id)) return // leave ManeuverPanel/analysis + rogue entities alone
+      e.show = showAllSats || !focusedEntityId || e.id === focusedEntityId || isDebrisId(e.id)
     })
   }, [showAllSats, focusedEntityId, activated])
 
@@ -152,29 +157,84 @@ function App() {
         name:     obj.name,
         position: pos,
         point: {
-          pixelSize:                isAdversarial ? 8 : 6,
+          pixelSize:                isAdversarial ? 16 : 12,
           color:                    Cesium.Color.fromCssColorString(dotColor),
-          outlineColor:             Cesium.Color.fromCssColorString(dotColor).withAlpha(0.4),
-          outlineWidth:             2,
-          scaleByDistance:          new Cesium.NearFarScalar(1e6, 1.2, 2e7, 0.5),
-          disableDepthTestDistance: 0,
+          outlineColor:             Cesium.Color.fromCssColorString(dotColor).withAlpha(0.55),
+          outlineWidth:             isAdversarial ? 5 : 3,
+          scaleByDistance:          new Cesium.NearFarScalar(1e6, 1.4, 2e7, 0.6),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
         label: {
-          text:             obj.name,
-          font:             '10px Manrope, system-ui, sans-serif',
-          fillColor:        Cesium.Color.fromCssColorString(labelColor).withAlpha(0.85),
-          outlineColor:     Cesium.Color.BLACK,
-          outlineWidth:     2,
-          style:            Cesium.LabelStyle.FILL_AND_OUTLINE,
-          pixelOffset:      new Cesium.Cartesian2(0, -14),
-          scaleByDistance:  new Cesium.NearFarScalar(5e5, 1, 5e6, 0),
-          disableDepthTestDistance: 0,
+          text:                     `${obj.name}\n${obj.severity}`,
+          font:                     `${isAdversarial ? 'bold ' : ''}10px Manrope, system-ui, sans-serif`,
+          fillColor:                Cesium.Color.fromCssColorString(labelColor).withAlpha(0.92),
+          outlineColor:             Cesium.Color.BLACK,
+          outlineWidth:             2,
+          style:                    Cesium.LabelStyle.FILL_AND_OUTLINE,
+          pixelOffset:              new Cesium.Cartesian2(0, -18),
+          scaleByDistance:          new Cesium.NearFarScalar(5e5, 1, 8e6, 0),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          showBackground:           isAdversarial,
+          backgroundColor:          isAdversarial
+            ? Cesium.Color.fromCssColorString('#ef4444').withAlpha(0.15)
+            : undefined,
+          backgroundPadding: isAdversarial ? new Cesium.Cartesian2(5, 3) : undefined,
         },
       })
-      entity.show = showAllSats || !focusedEntityId
+      entity.show = false  // hidden by default; DashboardOverlay shows them during analysis
       rogueEntitiesRef.current.push(entity)
     })
   }, [activated, demoMode])
+
+  // Click handler for rogue actor entities — highlight + dispatch event to dashboard
+  useEffect(() => {
+    if (!activated) return
+    const viewer = window._driftViewer
+    const Cesium = window.Cesium
+    if (!viewer || viewer.isDestroyed() || !Cesium) return
+
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas)
+
+    handler.setInputAction((click) => {
+      const picked = viewer.scene.pick(click.position)
+      const entityId = picked?.id?.id
+      if (!entityId) return
+
+      const rogue = rogueActorPositions.find(r => r.id === entityId)
+      if (!rogue) return
+
+      const isAdv = rogue.severity === 'ADVERSARIAL'
+      const dotColor = isAdv ? '#ef4444' : '#f59e0b'
+
+      // Unhighlight previous selection
+      const prevId = selectedRogueIdRef.current
+      if (prevId && prevId !== entityId) {
+        const prevRogue = rogueActorPositions.find(r => r.id === prevId)
+        const prevEnt   = viewer.entities.getById(prevId)
+        if (prevEnt && prevRogue) {
+          const wasAdv = prevRogue.severity === 'ADVERSARIAL'
+          prevEnt.point.pixelSize   = wasAdv ? 16 : 12
+          prevEnt.point.outlineWidth = wasAdv ? 5 : 3
+          prevEnt.point.color = Cesium.Color.fromCssColorString(wasAdv ? '#ef4444' : '#f59e0b')
+        }
+      }
+
+      // Highlight selected entity — white ring + enlarged
+      const ent = viewer.entities.getById(entityId)
+      if (ent) {
+        ent.point.pixelSize    = isAdv ? 24 : 20
+        ent.point.outlineWidth = 8
+        ent.point.outlineColor = Cesium.Color.WHITE.withAlpha(0.9)
+        ent.point.color        = Cesium.Color.fromCssColorString(dotColor)
+      }
+      selectedRogueIdRef.current = entityId
+
+      // Notify DashboardOverlay
+      window.dispatchEvent(new CustomEvent('drift-rogue-click', { detail: rogue }))
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
+
+    return () => { try { handler.destroy() } catch {} }
+  }, [activated])
 
   const handleRetarget = (noradId, entityId = null) => {
     const numId = Number(noradId)
@@ -201,8 +261,8 @@ function App() {
     if (viewer && !viewer.isDestroyed()) {
       viewer.entities.values.forEach(e => {
         if (!GLOBE_ENTITY_IDS.has(e.id)) { e.show = true; return }
-        // Show only the focused satellite (or all if NORAD not in our catalogue)
-        e.show = !entityId || e.id === entityId
+        // Show the focused satellite + all debris; hide other sats
+        e.show = !entityId || e.id === entityId || isDebrisId(e.id)
       })
     }
 
