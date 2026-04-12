@@ -96,8 +96,30 @@ class SpaceTrackClient:
         Fetch historical TLEs for each NORAD ID over the last `days` days.
         Returns {norad_id: [raw_record, ...]} sorted by epoch ascending.
         """
-        end = datetime.now(timezone.utc)
+        end   = datetime.now(timezone.utc)
         start = end - timedelta(days=days)
+        return self.fetch_history_range(norad_ids, start, end)
+
+    def fetch_history_range(
+        self,
+        norad_ids: list[int],
+        start: datetime,
+        end: datetime,
+    ) -> dict[int, list[dict]]:
+        """
+        Fetch historical TLEs for each NORAD ID over a specific date range.
+
+        Use this for historical incident reconstruction where the relevant
+        data is not in the recent N-day window.
+
+        Args:
+            norad_ids: Satellites to fetch.
+            start:     Start of the date range (UTC).
+            end:       End of the date range (UTC).
+
+        Returns:
+            {norad_id: [raw_record, ...]} sorted by epoch ascending.
+        """
         date_range = (
             f"{start.strftime('%Y-%m-%d')}--{end.strftime('%Y-%m-%d')}"
         )
@@ -109,10 +131,13 @@ class SpaceTrackClient:
                 f"/class/gp_history/NORAD_CAT_ID/{norad_id}"
                 f"/EPOCH/{date_range}/orderby/EPOCH asc/format/json"
             )
-            logger.info(f"Fetching TLE history: NORAD {norad_id} ({days}d)")
+            logger.info(
+                f"Fetching TLE history: NORAD {norad_id} "
+                f"({start.strftime('%Y-%m-%d')} to {end.strftime('%Y-%m-%d')})"
+            )
             raw = self._get(url).json()
             results[norad_id] = raw
-            logger.info(f"  → {len(raw)} records")
+            logger.info(f"  -> {len(raw)} records")
             time.sleep(0.5)  # polite rate-limiting
 
         return results

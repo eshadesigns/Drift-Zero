@@ -8,7 +8,13 @@
       "Bash(python -c \"import databricks\")",
       "Bash(python -c \"import skyfield\")",
       "Bash(.venv\\\\Scripts\\\\pip install:*)",
-      "Bash(.venv/Scripts/pip install:*)"
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(.venv/Scripts/python -c ':*)",
+      "Bash(./.venv/Scripts/python.exe test_rogue_features.py --impact --mismatch)",
+      "Bash(python test_rogue_features.py)",
+      "Bash(ls data/incident_*)",
+      "Bash(ls data/*.json)",
+      "Bash(python:*)"
     ]
   }
 }
