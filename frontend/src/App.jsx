@@ -11,10 +11,18 @@ const PANEL_MIN = 15   // % of screen width
 const PANEL_MAX = 55
 const DEFAULT_PANEL = 30
 
-export default function DashboardOverlay() {
+export default function DashboardOverlay({ activated = false }) {
   const [selectedConjunction, setSelectedConjunction] = useState(null)
   const [panelPct, setPanelPct] = useState(DEFAULT_PANEL)
-  const [collapsed, setCollapsed] = useState(null) // null | 'panels'
+  const [collapsed, setCollapsed] = useState('panels') // start hidden, open on activate
+
+  // Slide panels in after activation
+  useEffect(() => {
+    if (activated) {
+      const t = setTimeout(() => setCollapsed(null), 300)
+      return () => clearTimeout(t)
+    }
+  }, [activated])
   const [isDragging, setIsDragging] = useState(false)
   const [dividerHover, setDividerHover] = useState(false)
   const tabDragMoved = useRef(false) // tracks whether tab mousedown became a drag
@@ -87,10 +95,13 @@ export default function DashboardOverlay() {
 
   return (
     <>
-      {/* ── StatsBar — top ───────────────────────────────────────────────────── */}
+      {/* ── StatsBar — top (hidden until activated) ─────────────────────────── */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
-        pointerEvents: 'auto',
+        pointerEvents: activated ? 'auto' : 'none',
+        opacity: activated ? 1 : 0,
+        transform: activated ? 'translateY(0)' : 'translateY(-100%)',
+        transition: 'opacity 0.5s ease 0.4s, transform 0.5s ease 0.4s',
       }}>
         <StatsBar />
       </div>
@@ -150,9 +161,9 @@ export default function DashboardOverlay() {
         </div>
       </div>
 
-      {/* ── Divider — drag strip + always-visible collapse tab ───────────────── */}
+      {/* ── Divider — hidden until activated ────────────────────────────────── */}
       <div
-        onMouseDown={onDividerMouseDown}
+        onMouseDown={activated ? onDividerMouseDown : undefined}
         onMouseEnter={() => setDividerHover(true)}
         onMouseLeave={() => setDividerHover(false)}
         style={{
@@ -164,7 +175,8 @@ export default function DashboardOverlay() {
           zIndex: 11,
           cursor: 'col-resize',
           transition,
-          pointerEvents: 'auto',
+          opacity: activated ? 1 : 0,
+          pointerEvents: activated ? 'auto' : 'none',
           background: isDragging
             ? 'rgba(34,211,238,0.3)'
             : dividerHover
