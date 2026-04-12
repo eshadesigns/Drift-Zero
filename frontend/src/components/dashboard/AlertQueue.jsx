@@ -43,12 +43,12 @@ export default function AlertQueue({
         </span>
         <span style={{
           fontSize: 10, fontWeight: 600,
-          color: loading ? '#64748b' : '#f87171',
-          background: loading ? 'rgba(100,116,139,0.15)' : 'rgba(248,113,113,0.12)',
+          color: loading ? '#64748b' : criticalCount > 0 ? '#f87171' : '#22c55e',
+          background: loading ? 'rgba(100,116,139,0.15)' : criticalCount > 0 ? 'rgba(248,113,113,0.12)' : 'rgba(34,197,94,0.12)',
           borderRadius: 10,
           padding: '2px 8px', letterSpacing: '0.05em',
         }}>
-          {loading ? '…' : `${criticalCount} CRITICAL`}
+          {loading ? '…' : criticalCount > 0 ? `${criticalCount} CRITICAL` : 'ALL CLEAR'}
         </span>
       </div>
 
@@ -89,6 +89,19 @@ export default function AlertQueue({
           </p>
           <span style={{ fontSize: 10, color: '#475569' }}>
             Space-Track · Shield pipeline
+          </span>
+        </div>
+      ) : conjunctions.length === 0 ? (
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          justifyContent: 'center', padding: '36px 24px 48px', textAlign: 'center', gap: 8,
+        }}>
+          <span style={{ fontSize: 20 }}>✓</span>
+          <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', lineHeight: 1.5, maxWidth: 220 }}>
+            No conjunction events above threshold
+          </p>
+          <span style={{ fontSize: 10, color: '#475569' }}>
+            This satellite is currently safe
           </span>
         </div>
       ) : (

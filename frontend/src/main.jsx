@@ -41,15 +41,19 @@ function App() {
     if (activated) window._driftSpinning = false
   }, [activated])
 
-  const handleActivate = (noradId) => {
+  const handleActivate = (noradId, tleData = null) => {
     // Show all entities when user hits Track
     const viewer = window._driftViewer
     if (viewer && !viewer.isDestroyed()) {
       viewer.entities.values.forEach(e => { e.show = true })
     }
-    // Zoom to satellite if a NORAD ID was entered
+    // Zoom to satellite if a NORAD ID was entered.
+    // Pass fresh TLE lines from the validation response so _driftFocusSat can
+    // propagate to the satellite's actual current position.
     if (noradId) {
-      setTimeout(() => window._driftFocusSat?.(noradId), 100)
+      const tle1 = tleData?.tle_line1 ?? null
+      const tle2 = tleData?.tle_line2 ?? null
+      setTimeout(() => window._driftFocusSat?.(noradId, tle1, tle2), 100)
     }
     // Store the entered NORAD ID so DashboardOverlay can run the pipeline for it
     const parsed = parseInt(noradId, 10)

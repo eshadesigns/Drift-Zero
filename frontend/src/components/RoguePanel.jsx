@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 
 const BASE_URL = import.meta.env.VITE_SHIELD_API_URL ?? 'http://localhost:8000'
+const DEFAULT_ROGUE_NORADS = [59773, 25544, 48274, 44713, 28190]
 
 const SEV_COLOR = {
   ADVERSARIAL: '#ef4444',
@@ -8,27 +9,41 @@ const SEV_COLOR = {
   NOMINAL:     '#22d3ee',
 }
 
-export default function RoguePanel({ visible }) {
+export default function RoguePanel({ visible, noradId = null }) {
   const [events, setEvents]   = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState(null)
-  const [fetched, setFetched] = useState(false)
 
+  // Re-fetch whenever the tracked satellite changes or the panel becomes visible
   useEffect(() => {
-    if (!visible || fetched) return
+    if (!visible) return
+    let cancelled = false
     setLoading(true)
-    fetch(`${BASE_URL}/api/rogue/events`)
+    setError(null)
+    setEvents([])
+
+    const url = (() => {
+      if (!noradId) return `${BASE_URL}/api/rogue/events`
+      const id = parseInt(noradId, 10)
+      // If the tracked satellite is already in the default watch list, use the
+      // default endpoint so all 5 adversarial watch satellites are included.
+      if (DEFAULT_ROGUE_NORADS.includes(id)) return `${BASE_URL}/api/rogue/events`
+      // Otherwise query the full default list plus the tracked satellite.
+      const allIds = [...DEFAULT_ROGUE_NORADS, id]
+      return `${BASE_URL}/api/rogue/events?${allIds.map(n => `norad_ids=${n}`).join('&')}`
+    })()
+
+    fetch(url)
       .then(r => {
         if (!r.ok) throw new Error(`${r.status} ${r.statusText}`)
         return r.json()
       })
-      .then(data => {
-        setEvents(data)
-        setFetched(true)
-      })
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false))
-  }, [visible, fetched])
+      .then(data => { if (!cancelled) setEvents(data) })
+      .catch(err => { if (!cancelled) setError(err.message) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+
+    return () => { cancelled = true }
+  }, [visible, noradId])
 
   return (
     <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -38,7 +53,7 @@ export default function RoguePanel({ visible }) {
         <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: '#94a3b8', textTransform: 'uppercase' }}>
           Rogue Intelligence
         </span>
-        {fetched && !loading && (
+        {!loading && events.length > 0 && (
           <span style={{ fontSize: 10, color: '#22d3ee' }}>
             {events.filter(e => e.severity !== 'NOMINAL').length} flagged
           </span>
@@ -57,7 +72,7 @@ export default function RoguePanel({ visible }) {
         </div>
       )}
 
-      {!loading && !error && events.length === 0 && fetched && (
+      {!loading && !error && events.length === 0 && (
         <div style={{ color: '#64748b', fontSize: 12, padding: '24px 0', textAlign: 'center' }}>
           No suspicious or adversarial events detected.
         </div>

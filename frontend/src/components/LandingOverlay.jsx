@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 
-const EXAMPLE_IDS = ['25544', '44713', '47526', '28654', '40115', '46984']
+const BASE_URL = import.meta.env.VITE_SHIELD_API_URL ?? 'http://localhost:8000'
+const EXAMPLE_IDS = ['25544', '59773', '20580', '28654', '29499', '27424']
 const GROTESK = "'Space Grotesk', system-ui, sans-serif"
 
 export default function LandingOverlay({ onActivate }) {
   const [satId, setSatId] = useState('')
-  const [phase, setPhase] = useState('idle')
+  const [phase, setPhase] = useState('idle')  // 'idle' | 'validating' | 'dissolving'
+  const [validationError, setValidationError] = useState(null)
   const [placeholder, setPlaceholder] = useState('')
   const [exampleIdx, setExampleIdx] = useState(0)
   const inputRef = useRef(null)
@@ -36,13 +38,50 @@ export default function LandingOverlay({ onActivate }) {
     return () => clearInterval(typingRef.current)
   }, [exampleIdx])
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e?.preventDefault()
-    setPhase('dissolving')
-    setTimeout(() => onActivate(satId.trim()), 900)
+    const id = satId.trim()
+    setValidationError(null)
+
+    // If empty, activate with no NORAD (show all assets)
+    if (!id) {
+      setPhase('dissolving')
+      setTimeout(() => onActivate(null), 900)
+      return
+    }
+
+    const parsed = parseInt(id, 10)
+    if (isNaN(parsed) || parsed <= 0) {
+      setValidationError('Please enter a numeric NORAD ID. Try: ISS (25544), COSMOS-2576 (59773), Hubble (20580).')
+      return
+    }
+
+    setPhase('validating')
+    try {
+      const res = await fetch(`${BASE_URL}/api/satellite/${parsed}`)
+      if (res.status === 404) {
+        setPhase('idle')
+        setValidationError(`Satellite not found. Please enter a valid NORAD ID or try one of these: ISS (25544), COSMOS-2576 (59773), Hubble (20580).`)
+        return
+      }
+      if (!res.ok) {
+        setPhase('idle')
+        setValidationError(`Lookup failed (${res.status}). Check the backend is running and try again.`)
+        return
+      }
+      // Valid — dissolve and navigate, pass TLE data so the globe can zoom
+      // to the satellite's actual current position without re-fetching.
+      const tleData = await res.json()
+      setPhase('dissolving')
+      setTimeout(() => onActivate(id, tleData), 900)
+    } catch {
+      setPhase('idle')
+      setValidationError('Cannot reach the backend. Make sure the server is running on localhost:8000.')
+    }
   }
 
   const dissolving = phase === 'dissolving'
+  const validating = phase === 'validating'
 
   return (
     <div style={{
@@ -138,7 +177,7 @@ export default function LandingOverlay({ onActivate }) {
             <div style={{
               flex: 1,
               background: 'rgba(3,7,18,0.7)',
-              border: '1px solid rgba(255,255,255,0.12)',
+              border: `1px solid ${validationError ? 'rgba(248,113,113,0.5)' : 'rgba(255,255,255,0.12)'}`,
               borderRadius: 8,
               backdropFilter: 'blur(12px)',
               transition: 'border-color 0.2s',
@@ -146,10 +185,11 @@ export default function LandingOverlay({ onActivate }) {
               <input
                 ref={inputRef}
                 value={satId}
-                onChange={e => setSatId(e.target.value)}
-                onFocus={e => e.currentTarget.parentElement.style.borderColor = 'rgba(34,211,238,0.5)'}
-                onBlur={e => e.currentTarget.parentElement.style.borderColor = 'rgba(255,255,255,0.12)'}
+                onChange={e => { setSatId(e.target.value); setValidationError(null) }}
+                onFocus={e => e.currentTarget.parentElement.style.borderColor = validationError ? 'rgba(248,113,113,0.5)' : 'rgba(34,211,238,0.5)'}
+                onBlur={e => e.currentTarget.parentElement.style.borderColor = validationError ? 'rgba(248,113,113,0.5)' : 'rgba(255,255,255,0.12)'}
                 placeholder={placeholder || 'Satellite ID…'}
+                disabled={validating}
                 style={{
                   width: '100%', padding: '12px 16px',
                   background: 'transparent', border: 'none', outline: 'none',
@@ -161,32 +201,50 @@ export default function LandingOverlay({ onActivate }) {
             </div>
             <button
               type="submit"
+              disabled={validating}
               style={{
                 padding: '12px 20px',
                 borderRadius: 8,
-                background: 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)',
+                background: validating
+                  ? 'rgba(99,102,241,0.4)'
+                  : 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)',
                 border: 'none', color: '#fff',
                 fontSize: 12, fontWeight: 700, letterSpacing: '0.08em',
-                cursor: 'pointer', textTransform: 'uppercase',
+                cursor: validating ? 'default' : 'pointer', textTransform: 'uppercase',
                 fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace",
                 whiteSpace: 'nowrap',
                 boxShadow: '0 0 20px rgba(99,102,241,0.4)',
                 transition: 'opacity 0.15s, transform 0.15s',
+                opacity: validating ? 0.7 : 1,
               }}
-              onMouseEnter={e => { e.currentTarget.style.opacity='0.85'; e.currentTarget.style.transform='scale(1.03)' }}
-              onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='scale(1)' }}
+              onMouseEnter={e => { if (!validating) { e.currentTarget.style.opacity='0.85'; e.currentTarget.style.transform='scale(1.03)' } }}
+              onMouseLeave={e => { e.currentTarget.style.opacity= validating ? '0.7' : '1'; e.currentTarget.style.transform='scale(1)' }}
             >
-              Track →
+              {validating ? 'Checking…' : 'Track →'}
             </button>
           </form>
 
-          <p style={{
-            marginTop: 12, fontSize: 11,
-            color: '#334155',
-            fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace",
-          }}>
-            Press Enter to load all assets
-          </p>
+          {/* Validation error */}
+          {validationError && (
+            <p style={{
+              marginTop: 10, fontSize: 11,
+              color: '#f87171', lineHeight: 1.5,
+              fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace",
+              maxWidth: 400,
+            }}>
+              {validationError}
+            </p>
+          )}
+
+          {!validationError && (
+            <p style={{
+              marginTop: 12, fontSize: 11,
+              color: '#334155',
+              fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace",
+            }}>
+              Press Enter to load all assets
+            </p>
+          )}
 
         </div>
       </div>

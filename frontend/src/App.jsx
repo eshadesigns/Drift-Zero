@@ -8,7 +8,6 @@ import SatelliteModal from './components/SatelliteModal'
 import RoguePanel from './components/RoguePanel'
 import { satStore } from './satStore'
 import { fetchConjunctions, fetchSatellite, deriveStats } from './api/shield'
-import { conjunctions as mockConjunctions } from './data/mockData.js'
 
 const PANEL_MIN = 15   // % of screen width
 const PANEL_MAX = 55
@@ -52,10 +51,18 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
         if (cancelled) return
         setIsLive(true)
         setStats(prev => ({ ...prev, ...liveStats }))
-        setConjunctions(live.length > 0 ? live : (mockConjunctions ?? []))
+        setConjunctions(live)
+        // Keep the modal in sync with the Shield count whenever the satellite
+        // panel is open for the same NORAD ID.  We don't require analyzed=true
+        // because the backend result is authoritative — if the modal is showing
+        // it should always reflect the live conjunction count.
+        const storeState = satStore.getState()
+        if (storeState.sat?.noradId === selectedNoradId) {
+          satStore.setAnalyzed(live.length)
+        }
       } catch (err) {
         if (cancelled || err.name === 'AbortError') return
-        setConjunctions(mockConjunctions ?? [])
+        setConjunctions([])
       } finally {
         if (!cancelled) setConjunctionsLoading(false)
       }
@@ -99,15 +106,17 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
           }))
           .filter(t => { if (seen.has(t.norad_id)) return false; seen.add(t.norad_id); return true })
 
-        const renderGlobe = () => window._driftRenderConjunction?.(primaryTle, threatTles)
+        // Render conjunction entities on the globe as soon as data is ready.
+        // _driftFocusSat (called at activation) owns the camera zoom; step 5
+        // of _driftRenderConjunction no longer fires a competing flyTo.
         if (typeof window._driftRenderConjunction === 'function') {
-          renderGlobe()
+          window._driftRenderConjunction(primaryTle, threatTles)
         } else {
           const started = Date.now()
           const globePoll = setInterval(() => {
             if (typeof window._driftRenderConjunction === 'function') {
               clearInterval(globePoll)
-              renderGlobe()
+              window._driftRenderConjunction(primaryTle, threatTles)
             } else if (Date.now() - started > 10_000) {
               clearInterval(globePoll)
             }
@@ -322,7 +331,7 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
                 overflowY: 'auto',
                 overflowX: 'hidden',
               }}>
-                <RoguePanel visible={activeMode === 'rogue'} />
+                <RoguePanel visible={activeMode === 'rogue'} noradId={selectedNoradId} />
               </div>
             </>
           )}

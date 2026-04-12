@@ -25,12 +25,12 @@ const SAT_TLES = [
     tle2: '2 20580  28.4700 200.1234 0002345 100.5678 259.4321 15.09099873456789',
   },
   {
-    id: 'SL1', name: 'STARLINK-1007', type: 'satellite',
-    noradId: 44713, inclination: 53.0, period: 95.5,
-    country: 'USA', status: 'Active', launched: '2019-11-11',
-    description: 'SpaceX Starlink broadband constellation satellite.',
-    tle1: '1 44713U 19074A   24010.56525141  .00001064  00000-0  83911-4 0  9991',
-    tle2: '2 44713  53.0543 144.1568 0001407  83.2185 276.9030 15.06399142211516',
+    id: 'COSMOS2576', name: 'COSMOS-2576', type: 'satellite',
+    noradId: 59773, inclination: 97.9, period: 97.1,
+    country: 'Russia', status: 'Active', launched: '2024-05-16',
+    description: 'Russian military satellite conducting proximity operations near USA-326.',
+    tle1: '1 59773U 24088A   24145.50000000  .00001200  00000-0  95000-4 0  9991',
+    tle2: '2 59773  97.9000  80.0000 0003000  95.0000 265.0000 14.81000000 15432',
   },
   {
     id: 'SL2', name: 'STARLINK-2055', type: 'satellite',
@@ -262,25 +262,65 @@ export default function GlobeView() {
         viewerRef.current = viewer
         window._driftViewer = viewer   // expose for landing → dashboard activation
 
-        // Zoom to a satellite by NORAD ID — called from landing page on Track
-        window._driftFocusSat = (noradId) => {
+        // Zoom to a satellite by NORAD ID — called from landing page on Track.
+        // tle1/tle2 are the fresh lines from /api/satellite validation response;
+        // they propagate accurately to today's position. Without them we fall back
+        // to the entity's last-known position (set by the stale SAT_TLES postUpdate).
+        window._driftFocusSat = (noradId, tle1 = null, tle2 = null) => {
           if (!noradId) return
+
+          if (tle1 && tle2) {
+            // Fresh TLE path — propagate to right-now for accurate positioning.
+            try {
+              const satrec = satellite.twoline2satrec(tle1, tle2)
+              const now    = new Date()
+              const pv     = satellite.propagate(satrec, now)
+              if (!pv?.position) return
+              const gmst   = satellite.gstime(now)
+              const geo    = satellite.eciToGeodetic(pv.position, gmst)
+              const entityPos = Cesium.Cartesian3.fromRadians(
+                geo.longitude, geo.latitude, geo.height * 1000
+              )
+
+              // Move the existing SAT_TLES entity to the correct position and
+              // swap its satrec so postUpdate keeps it there going forward.
+              // Without this, the entity sits at the stale 2024-TLE position
+              // (thousands of km away) while the camera zooms to the right spot.
+              const satEntry = SAT_TLES.find(s => String(s.noradId) === String(noradId))
+              if (satEntry) {
+                const entity = entitiesRef.current[satEntry.id]
+                if (entity) entity.position = entityPos
+                satrecs.current[satEntry.id] = satrec
+              }
+
+              viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromRadians(
+                  geo.longitude,
+                  geo.latitude,
+                  geo.height * 1000 + 2_500_000  // km → m, then 2500km above
+                ),
+                duration: 2.5,
+              })
+            } catch (e) { console.warn('_driftFocusSat (fresh TLE) error', e) }
+            return
+          }
+
+          // Fallback: read live position off the existing entity.
           const sat = SAT_TLES.find(s => String(s.noradId) === String(noradId))
           if (!sat) return
-          try {
-            const satrec = satellite.twoline2satrec(sat.tle1, sat.tle2)
-            const now = new Date()
-            const pv = satellite.propagate(satrec, now)
-            if (!pv?.position) return
-            const gmst = satellite.gstime(now)
-            const geo = satellite.eciToGeodetic(pv.position, gmst)
-            const dest = Cesium.Cartesian3.fromRadians(
-              geo.longitude,
-              geo.latitude,
-              geo.height * 1000 + 2_500_000  // 2500km above satellite
-            )
-            viewer.camera.flyTo({ destination: dest, duration: 2.5 })
-          } catch (e) { console.warn('_driftFocusSat error', e) }
+          const entity = entitiesRef.current[sat.id]
+          if (!entity) return
+          const pos = entity.position?.getValue?.(Cesium.JulianDate.now())
+          if (!pos) return
+          const carto = Cesium.Cartographic.fromCartesian(pos)
+          viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromRadians(
+              carto.longitude,
+              carto.latitude,
+              carto.height + 2_500_000
+            ),
+            duration: 2.5,
+          })
         }
 
         // ── Dynamic conjunction rendering ────────────────────────────────────
@@ -443,27 +483,9 @@ export default function GlobeView() {
             })
           })
 
-          // 5. Fly camera to primary satellite's current position
-          const primSatrec = dynMap[primaryId]
-          if (primSatrec) {
-            try {
-              const now = new Date()
-              const pv  = satellite.propagate(primSatrec, now)
-              if (pv?.position) {
-                const gmst = satellite.gstime(now)
-                const geo  = satellite.eciToGeodetic(pv.position, gmst)
-                viewer.camera.flyTo({
-                  destination: Cesium.Cartesian3.fromRadians(
-                    geo.longitude, geo.latitude,
-                    geo.height * 1000 + 3_000_000
-                  ),
-                  duration: 2.5,
-                })
-              }
-            } catch (e) {
-              console.warn('[_driftRenderConjunction] camera fly failed:', e)
-            }
-          }
+          // Step 5 (camera flyTo) removed — _driftFocusSat owns the initial
+          // zoom using the fresh TLE from the validation response, so firing
+          // a second flyTo here would interrupt that animation.
         }
 
         // ── Globe styling ───────────────────────────────────────────────────
@@ -646,16 +668,30 @@ export default function GlobeView() {
             if (obj) {
               const entity = entitiesRef.current[entityId]
 
-              // viewer.flyTo handles moving entities correctly — it reads the
-              // entity's live position and centres the camera on it
-              viewer.flyTo(entity, {
-                duration: 1.8,
-                offset: new Cesium.HeadingPitchRange(
-                  0,                           // heading — north up
-                  Cesium.Math.toRadians(-40),  // pitch  — slight top-down angle
-                  3_500_000                    // range  — 3500 km, shows orbit context
-                ),
-              })
+              // Propagate to the satellite's current position using its satrec.
+              // dynMap has fresh-TLE satrecs (post _driftRenderConjunction);
+              // satrecs.current has the initial SAT_TLES satrecs (pre-conjunction).
+              // We propagate instead of reading entity.position to avoid any
+              // frame-conversion or ConstantPositionProperty staleness issues.
+              const satrec = dynMap[entityId] ?? satrecs.current[entityId]
+              if (satrec) {
+                try {
+                  const now = new Date()
+                  const pv  = satellite.propagate(satrec, now)
+                  if (pv?.position) {
+                    const gmst = satellite.gstime(now)
+                    const geo  = satellite.eciToGeodetic(pv.position, gmst)
+                    viewer.camera.flyTo({
+                      destination: Cesium.Cartesian3.fromRadians(
+                        geo.longitude,
+                        geo.latitude,
+                        geo.height * 1000 + 2_000_000  // km → m, then 2000km above
+                      ),
+                      duration: 1.8,
+                    })
+                  }
+                } catch (e) { console.warn('click flyTo error', e) }
+              }
 
               // Highlight selected
               Object.entries(entitiesRef.current).forEach(([, e]) => {
@@ -828,16 +864,18 @@ export default function GlobeView() {
 
     const inConjunctionMode = Object.keys(dynMapRef.current).length > 0
 
-    positions.forEach(trajPos => {
-      if (inConjunctionMode) {
-        // In conjunction mode: check against the live dynamic threat satellites
-        Object.keys(dynMapRef.current).forEach(dynId => {
-          if (dynId === selected.id || atRisk.has(dynId)) return
-          const otherPos = entitiesRef.current[dynId]?.position?.getValue?.(Cesium.JulianDate.now())
-          if (otherPos && Cesium.Cartesian3.distance(trajPos, otherPos) < THRESHOLD) atRisk.add(dynId)
-        })
-      } else {
-        // Static mode: check against hardcoded debris + SAT_TLES
+    if (inConjunctionMode) {
+      // In conjunction mode the backend already ran proper TCA analysis and
+      // populated dynMap with every confirmed threat.  Mark them all at-risk
+      // directly — an instantaneous proximity scan would miss objects that
+      // are far away right now but have a close TCA in the future.
+      Object.keys(dynMapRef.current).forEach(dynId => {
+        if (dynId !== selected.id) atRisk.add(dynId)
+      })
+    } else {
+      // Static mode: geometric proximity scan against hardcoded demo objects.
+      // (Used before the backend pipeline has responded.)
+      positions.forEach(trajPos => {
         DEBRIS_STATIC.forEach(deb => {
           if (atRisk.has(deb.id)) return
           const debPos = Cesium.Cartesian3.fromDegrees(deb.lon, deb.lat, deb.alt * 1000)
@@ -848,13 +886,7 @@ export default function GlobeView() {
           const otherPos = entitiesRef.current[otherSat.id]?.position?.getValue?.(Cesium.JulianDate.now())
           if (otherPos && Cesium.Cartesian3.distance(trajPos, otherPos) < THRESHOLD) atRisk.add(otherSat.id)
         })
-      }
-    })
-
-    // Guarantee at least 2 markers for demo realism — only in static mode
-    if (!inConjunctionMode && atRisk.size < 2) {
-      const pool = [...DEBRIS_STATIC, ...SAT_TLES.filter(s => s.id !== selected.id)]
-      pool.sort(() => Math.random() - 0.5).slice(0, 2 - atRisk.size).forEach(o => atRisk.add(o.id))
+      })
     }
 
     // Draw red rings on at-risk objects

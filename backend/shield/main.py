@@ -910,9 +910,13 @@ app.add_middleware(
 )
 
 # Simple in-memory cache: norad_id -> list of conjunction event dicts.
+# Key is always the integer NORAD CAT ID — never a global sentinel.
 # Populated by GET /conjunctions/{norad_id}; read by GET /maneuvers/{norad_id}/{event_id}.
-# No expiry needed for demo use.
 _conjunction_cache: dict[int, list[dict]] = {}
+
+# TTL timestamps: norad_id -> Unix time of last pipeline run.
+# Kept alongside _conjunction_cache so both dicts are always in sync.
+_conjunction_cache_time: dict[int, float] = {}
 
 # Pipeline state cache: norad_id -> {primary_rec, primary_sat, catalog_records,
 # sat_by_norad, t_start}. Populated by run_pipeline(); read by GET /cascade.
@@ -1057,6 +1061,7 @@ async def get_conjunctions(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     _conjunction_cache[norad_id] = events
+    _conjunction_cache_time[norad_id] = time.monotonic()
 
     filtered = [e for e in events if e["risk_score"] >= min_risk]
     return {
