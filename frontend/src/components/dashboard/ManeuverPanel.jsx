@@ -195,9 +195,11 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
   // Globe entity refs
   const primaryOrbitRef   = useRef(null)  // primary sat orbit (drawn on conjunction select)
   const secondaryOrbitRef = useRef(null)  // threat orbit     (drawn on conjunction select)
+  const secLabelRef       = useRef(null)  // threat label     (drawn on conjunction select)
   const originalOrbitRef  = useRef(null)  // pre-maneuver orbit (drawn on option select)
   const entityRef         = useRef(null)  // post-maneuver orbit (drawn on option select)
   const labelRef          = useRef(null)  // info label         (drawn on option select)
+  const secAltOrbitRef    = useRef(null)  // secondary sat alt maneuver (purple, drawn on option select)
 
   const noradId = conjunction?.primarySatId
   const eventId = conjunction?.id
@@ -212,6 +214,20 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
   const orbitParams = demo
     ? (SAT_ORBIT_PARAMS[conjunction?.primarySatId] ?? { alt: 420, inclination: 51.6 })
     : { alt: 420, inclination: 51.6 }
+
+  // ── Secondary maneuverability check (computed early so effects can access) ──
+  // Is the secondary a maneuverable satellite (has an entry in SAT_ORBIT_PARAMS)?
+  const secSatId      = conjunction?.secondarySatId ?? null
+  const secOrbParams  = SAT_ORBIT_PARAMS[secSatId] ?? null
+  const secCanManeuver = !!secOrbParams
+  // If secondary can maneuver, compute its cheapest avoidance for comparison
+  let secCheapestDV = null
+  if (secCanManeuver && secOrbParams && conjunction) {
+    try {
+      const secOpts = computeManeuverOptions(conjunction, secOrbParams)
+      secCheapestDV = secOpts[2]  // index 2 = Fuel Efficient (cheapest)
+    } catch {}
+  }
 
   // ── Load / compute maneuver options ────────────────────────────────────────
   useEffect(() => {
@@ -257,6 +273,7 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
     }
     cleanup(primaryOrbitRef)
     cleanup(secondaryOrbitRef)
+    cleanup(secLabelRef)
     cleanup(originalOrbitRef)
     cleanup(entityRef)
     cleanup(labelRef)
@@ -293,9 +310,10 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
         })
       }
 
-      // ── Secondary / threat orbit (orange = debris, red = satellite) ────────
+      // ── Secondary / threat orbit (orange = uncontrolled debris, red = sat) ──
       if (secOrb) {
-        const secColor = secOrb.type === 'satellite' ? '#ef4444' : '#f97316'
+        const secIsSat   = !!SAT_ORBIT_PARAMS[secondarySatId]   // maneuverable satellite?
+        const secColor   = secIsSat ? '#ef4444' : '#f97316'
         const secPositions = secOrb.tle1 && sat
           ? buildOrbitFromTLE(Cesium, sat, secOrb.tle1, secOrb.tle2, 0)
           : buildDebrisOrbit(Cesium, secOrb)
@@ -311,6 +329,33 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
               arcType: Cesium.ArcType.NONE,
             },
           })
+
+          // ── Label on the threat orbit identifying it and its maneuverability ──
+          const midIdx  = Math.floor(secPositions.length / 2)
+          const midPos  = secPositions[midIdx]
+          if (midPos) {
+            secLabelRef.current = viewer.entities.add({
+              position: midPos,
+              label: {
+                text: secIsSat
+                  ? `⚠ ${conjunction.secondarySatName}\nCAN MANEUVER — see cost comparison below`
+                  : `${conjunction.secondarySatName}\nUNCONTROLLED · CANNOT MANEUVER`,
+                font:             'bold 11px "SF Mono", Consolas, monospace',
+                fillColor:        Cesium.Color.fromCssColorString(secColor).withAlpha(0.9),
+                outlineColor:     Cesium.Color.BLACK,
+                outlineWidth:     2,
+                style:            Cesium.LabelStyle.FILL_AND_OUTLINE,
+                showBackground:   true,
+                backgroundColor:  new Cesium.Color(0.02, 0.04, 0.1, 0.82),
+                backgroundPadding: new Cesium.Cartesian2(8, 6),
+                pixelOffset:      new Cesium.Cartesian2(14, 0),
+                horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+                verticalOrigin:   Cesium.VerticalOrigin.CENTER,
+                distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 30_000_000),
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              },
+            })
+          }
         }
       }
     } catch (e) {
@@ -333,6 +378,7 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
     cleanup(originalOrbitRef)
     cleanup(entityRef)
     cleanup(labelRef)
+    cleanup(secAltOrbitRef)
 
     if (!selected || !options || !Cesium || !viewer) return
 
@@ -410,6 +456,7 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
         position: labelPos,
         label: {
           text: [
+            `${conjunction?.primarySatName ?? conjunction?.primarySatId} MANEUVERS`,
             `OPTION ${selected} · ${opt.label.toUpperCase()}`,
             `ΔV   +${opt.delta_v_ms.toFixed(2)} m/s  prograde`,
             `ALT  ${Math.round(alt)} → ${Math.round(newAlt)} km  (+${dAlt.toFixed(2)} km)`,
@@ -431,10 +478,37 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
       })
+      // ── If secondary can maneuver: draw its cheapest option in purple ────────
+      if (demo && secOrbParams && secCheapestDV) {
+        try {
+          const secAlt     = secOrbParams.alt
+          const secVizDalt = 70  // fixed visual offset for secondary's alternate path
+          const secPositions = secOrbParams.tle1 && sat
+            ? buildOrbitFromTLE(Cesium, sat, secOrbParams.tle1, secOrbParams.tle2, secVizDalt)
+            : buildStaticOrbit(Cesium, secAlt + secVizDalt, secOrbParams.inclination ?? 51.6, 0)
+
+          if (secPositions.length >= 2) {
+            secAltOrbitRef.current = viewer.entities.add({
+              polyline: {
+                positions: secPositions,
+                width: 2.5,
+                material: new Cesium.PolylineGlowMaterialProperty({
+                  glowPower: 0.3,
+                  color: Cesium.Color.fromCssColorString('#a855f7').withAlpha(0.8),
+                }),
+                arcType:           Cesium.ArcType.NONE,
+                depthFailMaterial: new Cesium.ColorMaterialProperty(
+                  Cesium.Color.fromCssColorString('#a855f7').withAlpha(0.12)
+                ),
+              },
+            })
+          }
+        } catch {}
+      }
     } catch (e) {
       console.warn('ManeuverPanel: maneuver draw error', e)
     }
-  }, [selected, options, orbitParams, demo, eventId])
+  }, [selected, options, orbitParams, demo, eventId, secOrbParams, secCheapestDV])
 
   // ── Cleanup on unmount ─────────────────────────────────────────────────────
   useEffect(() => () => {
@@ -444,9 +518,11 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
     }
     remove(primaryOrbitRef)
     remove(secondaryOrbitRef)
+    remove(secLabelRef)
     remove(originalOrbitRef)
     remove(entityRef)
     remove(labelRef)
+    remove(secAltOrbitRef)
   }, [])
 
   // ── Early returns ──────────────────────────────────────────────────────────
@@ -481,7 +557,7 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
 
   return (
     <div style={{ margin: '0 10px 6px', borderRadius: 6, background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.07)', padding: '12px 14px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase' }}>
           Avoidance Strategies
         </span>
@@ -489,6 +565,83 @@ export default function ManeuverPanel({ conjunction, demo = false, onSelectManeu
           current miss {options.current_miss_km?.toFixed(3)} km
         </span>
       </div>
+
+      {/* ── Who maneuvers banner ─────────────────────────────────────────────── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        marginBottom: 10, padding: '6px 10px',
+        borderRadius: 5,
+        background: 'rgba(34,211,238,0.06)',
+        border: '1px solid rgba(34,211,238,0.2)',
+      }}>
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ flexShrink: 0 }}>
+          <circle cx="5" cy="5" r="4" stroke="#22d3ee" strokeWidth="1.4"/>
+          <circle cx="5" cy="5" r="1.8" fill="#22d3ee"/>
+        </svg>
+        <span style={{ fontSize: 10, color: '#94a3b8', letterSpacing: '0.06em' }}>MANEUVERING OBJECT</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#22d3ee', marginLeft: 2 }}>
+          {conjunction?.primarySatName ?? conjunction?.primarySatId}
+        </span>
+        <span style={{ marginLeft: 'auto', fontSize: 10, color: '#475569', fontFamily: "ui-monospace,'SF Mono',Consolas,monospace" }}>
+          {conjunction?.primarySatId}
+        </span>
+      </div>
+
+      {/* ── Secondary cannot maneuver notice ────────────────────────────────── */}
+      {!secCanManeuver && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          marginBottom: 10, padding: '5px 10px',
+          borderRadius: 5,
+          background: 'rgba(249,115,22,0.05)',
+          border: '1px solid rgba(249,115,22,0.18)',
+        }}>
+          <span style={{ fontSize: 10, color: '#f97316', letterSpacing: '0.04em' }}>
+            ✕ THREAT OBJECT
+          </span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: '#fb923c' }}>
+            {conjunction?.secondarySatName ?? conjunction?.secondarySatId}
+          </span>
+          <span style={{ fontSize: 10, color: '#64748b', marginLeft: 'auto' }}>
+            uncontrolled · cannot maneuver
+          </span>
+        </div>
+      )}
+
+      {/* ── Secondary CAN maneuver — show cost comparison ────────────────────── */}
+      {secCanManeuver && secCheapestDV && (
+        <div style={{
+          marginBottom: 10, padding: '8px 10px',
+          borderRadius: 5,
+          background: 'rgba(168,85,247,0.07)',
+          border: '1px solid rgba(168,85,247,0.35)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#a855f7', letterSpacing: '0.06em' }}>
+              ⚠ SECONDARY CAN ALSO MANEUVER
+            </span>
+          </div>
+          <div style={{ fontSize: 10, color: '#94a3b8', lineHeight: 1.55 }}>
+            <span style={{ color: '#c084fc', fontWeight: 600 }}>{conjunction?.secondarySatName}</span>
+            {' '}could execute a cheaper avoidance burn instead.
+          </div>
+          <div style={{ display: 'flex', gap: 12, marginTop: 5 }}>
+            <div style={{ fontSize: 10, color: '#64748b' }}>
+              Secondary cheapest: <span style={{ color: '#a855f7', fontWeight: 600 }}>
+                {secCheapestDV.delta_v_ms.toFixed(2)} m/s · {fmtCost(secCheapestDV.fuel_cost_usd)}
+              </span>
+            </div>
+            <div style={{ fontSize: 10, color: '#64748b' }}>
+              Primary cheapest: <span style={{ color: '#86efac', fontWeight: 600 }}>
+                {options.maneuver_options[2]?.delta_v_ms.toFixed(2)} m/s · {fmtCost(options.maneuver_options[2]?.fuel_cost_usd)}
+              </span>
+            </div>
+          </div>
+          <div style={{ fontSize: 10, color: '#7c3aed', marginTop: 3, fontStyle: 'italic' }}>
+            Purple paths on globe = secondary satellite's alternate maneuver trajectories
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {options.maneuver_options.map((opt, i) => {

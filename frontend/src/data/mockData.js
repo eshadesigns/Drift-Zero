@@ -747,3 +747,257 @@ export const mockRogueEvents = {
     }
   ]
 }
+
+// ─── MOCK ASSET IMPACT (ported from backend/rogue/impact.py) ─────────────────
+// Economic and strategic value of each focused satellite.
+// Keyed by GlobeView entity ID. Shape matches /api/rogue/impact/{norad_id} response.
+export const mockAssetImpact = {
+  ISS: {
+    norad_id: 25544,
+    name: "International Space Station",
+    constellation: "ISS",
+    strategic_tier: "HIGH",
+    economic_impact_usd_per_day: 150000000,
+    economic_impact_formatted: "$150M",
+    users_at_risk: "7 crew members, 15-nation partnership",
+    mission_description: "Human spaceflight platform, microgravity research, international cooperation",
+    replacement_cost_usd: 150000000000,
+    replacement_cost_formatted: "$150B",
+    notes: "$150B assembly cost. Loss would end human LEO presence for years."
+  },
+  HST: {
+    norad_id: 20580,
+    name: "Hubble Space Telescope",
+    constellation: "Science",
+    strategic_tier: "HIGH",
+    economic_impact_usd_per_day: 10000000,
+    economic_impact_formatted: "$10M",
+    users_at_risk: "Global scientific community",
+    mission_description: "UV/optical astronomy — 30-year mission, 1.5M observations",
+    replacement_cost_usd: 10000000000,
+    replacement_cost_formatted: "$10B",
+    notes: "Irreplaceable scientific asset. No servicing mission currently planned."
+  },
+  NOAA18: {
+    norad_id: 28654,
+    name: "NOAA-18",
+    constellation: "NOAA",
+    strategic_tier: "HIGH",
+    economic_impact_usd_per_day: 50000000,
+    economic_impact_formatted: "$50M",
+    users_at_risk: "300M US residents — weather forecasting, hurricane track",
+    mission_description: "Polar-orbiting weather satellite — severe weather monitoring",
+    replacement_cost_usd: 500000000,
+    replacement_cost_formatted: "$500M",
+    notes: "Part of NOAA POES constellation. Loss degrades hurricane forecasting by 12-18 hours."
+  },
+  TERRA: {
+    norad_id: 25994,
+    name: "Terra (EOS AM-1)",
+    constellation: "NASA EOS",
+    strategic_tier: "HIGH",
+    economic_impact_usd_per_day: 25000000,
+    economic_impact_formatted: "$25M",
+    users_at_risk: "Climate scientists, agricultural sector, US military environmental intel",
+    mission_description: "Multi-instrument Earth observation — MODIS, MISR, ASTER sensors",
+    replacement_cost_usd: 1300000000,
+    replacement_cost_formatted: "$1.3B",
+    notes: "MODIS data used by US military for weather and terrain analysis."
+  },
+  METOP: {
+    norad_id: 29499,
+    name: "MetOp-A",
+    constellation: "EUMETSAT",
+    strategic_tier: "MEDIUM",
+    economic_impact_usd_per_day: 30000000,
+    economic_impact_formatted: "$30M",
+    users_at_risk: "European aviation, NATO meteorological centers",
+    mission_description: "Polar-orbiting operational meteorology for Europe and NATO",
+    replacement_cost_usd: 700000000,
+    replacement_cost_formatted: "$700M",
+    notes: "ASCAT and IASI data shared with NATO. Loss affects EU weather forecasting and military ops."
+  },
+  SL1: {
+    norad_id: 44713,
+    name: "STARLINK-1007",
+    constellation: "Starlink",
+    strategic_tier: "MEDIUM",
+    economic_impact_usd_per_day: 500000,
+    economic_impact_formatted: "$500K",
+    users_at_risk: "Broadband subscribers in coverage zone",
+    mission_description: "Broadband internet constellation satellite",
+    replacement_cost_usd: 500000,
+    replacement_cost_formatted: "$500K",
+    notes: "Individual loss absorbed by constellation. Pattern of targeting Starlink is strategically significant."
+  },
+  SL2: {
+    norad_id: 47526,
+    name: "STARLINK-2055",
+    constellation: "Starlink",
+    strategic_tier: "MEDIUM",
+    economic_impact_usd_per_day: 500000,
+    economic_impact_formatted: "$500K",
+    users_at_risk: "Broadband subscribers in coverage zone",
+    mission_description: "Broadband internet constellation satellite — v1.5 with laser inter-satellite links",
+    replacement_cost_usd: 500000,
+    replacement_cost_formatted: "$500K",
+    notes: "Starlink provides Ukraine with battlefield internet. KOSMOS-2576 targeting is strategically motivated."
+  },
+  AQUA: null,
+}
+
+// ─── MOCK MISSION MISMATCH (ported from backend/rogue/mission_mismatch.py) ────
+// Declared vs actual behavior scoring. Keyed by GlobeView entity ID.
+// Shape matches /api/rogue/mismatch/{norad_id} response.
+export const mockMissionMismatch = {
+  ISS: {
+    norad_id: 25544,
+    object_name: "ISS",
+    declared_mission: "crewed",
+    mismatch_score: 0.06,
+    verdict: "NORMAL",
+    signals: [],
+    notes: "Expected maneuvering for debris avoidance. All burns within normal mission profile."
+  },
+  HST: {
+    norad_id: 20580,
+    object_name: "Hubble Space Telescope",
+    declared_mission: "science",
+    mismatch_score: 0.08,
+    verdict: "NORMAL",
+    signals: [],
+    notes: "No propulsion. Station-keeping via gyroscopes only. No anomalous behavior."
+  },
+  SL1: {
+    norad_id: 44713,
+    object_name: "STARLINK-1007",
+    declared_mission: "communications",
+    mismatch_score: 0.15,
+    verdict: "NORMAL",
+    signals: ["slightly_elevated_proximity_maneuvers"],
+    notes: "Normal Starlink behavior — regular orbital maintenance, drag compensation."
+  },
+  SL2: {
+    norad_id: 47526,
+    object_name: "STARLINK-2055",
+    declared_mission: "communications",
+    mismatch_score: 0.18,
+    verdict: "NORMAL",
+    signals: ["slightly_elevated_proximity_maneuvers"],
+    notes: "v1.5 with laser links — expected slightly more maneuvering for inter-sat alignment."
+  },
+  NOAA18: {
+    norad_id: 28654,
+    object_name: "NOAA-18",
+    declared_mission: "weather",
+    mismatch_score: 0.09,
+    verdict: "NORMAL",
+    signals: [],
+    notes: "Minimal station-keeping. Behavior fully consistent with operational weather satellite."
+  },
+  TERRA: {
+    norad_id: 25994,
+    object_name: "Terra (EOS AM-1)",
+    declared_mission: "science",
+    mismatch_score: 0.11,
+    verdict: "NORMAL",
+    signals: [],
+    notes: "Aging spacecraft with declining fuel reserves. Fewer maneuvers than earlier in mission."
+  },
+  METOP: {
+    norad_id: 29499,
+    object_name: "MetOp-A",
+    declared_mission: "weather",
+    mismatch_score: 0.13,
+    verdict: "NORMAL",
+    signals: [],
+    notes: "Operational meteorological satellite. Behavior consistent with EUMETSAT operational norms."
+  },
+  AQUA: {
+    norad_id: 27424,
+    object_name: "Aqua (EOS PM-1)",
+    declared_mission: "science",
+    mismatch_score: 0.10,
+    verdict: "NORMAL",
+    signals: [],
+    notes: "Formation flying with Terra. Controlled orbit lowers periodically for coverage overlap."
+  },
+}
+
+// ─── MOCK INCIDENTS (ported from backend/rogue/incidents.py) ─────────────────
+// Documented historical adversarial satellite incidents.
+// Shape matches /api/rogue/incidents response.
+// relevantSatIds: which focused satellite entity IDs this incident is relevant to.
+export const mockIncidents = [
+  {
+    id: "cosmos-1408-asat-2021",
+    title: "Cosmos 1408 ASAT Destruction",
+    date: "2021-11-15",
+    classification: "ASAT",
+    relevantSatIds: ["ISS"],
+    summary: "Russia deliberately destroyed its own Cosmos 1408 satellite with a direct-ascent ASAT missile, generating ~1,500 trackable debris pieces and forcing ISS crew to shelter. The pre-launch maneuvering of the interceptor vehicle is visible in TLE history.",
+    actor: { norad_id: 13552, name: "COSMOS 1408", country: "Russia" },
+    target: { norad_id: 25544, name: "ISS", country: "International" },
+    consequence: "1,500+ trackable debris pieces in ISS-crossing orbit. ISS crew sheltered for 2 hours. Debris field persists for decades — DEB9–DEB11 in this system are Cosmos 1408 fragments.",
+    detection_summary: "Drift Zero would have flagged unusual orbital activity 3 days before the event. Debris cloud created conjunction events with ISS within hours.",
+  },
+  {
+    id: "kosmos-2542-shadowing-2020",
+    title: "Kosmos 2542/2543 Inspector Campaign",
+    date: "2020-02-10",
+    classification: "SHADOWING",
+    relevantSatIds: ["SL1", "SL2"],
+    summary: "Russia's Kosmos 2542 deployed a sub-satellite (Kosmos 2543) which began shadowing a classified US reconnaissance satellite at close range. US Space Force warned this was 'consistent with a space weapons system.'",
+    actor: { norad_id: 44878, name: "COSMOS 2542", country: "Russia" },
+    target: { norad_id: 45175, name: "COSMOS 2543 (sub-satellite)", country: "Russia" },
+    consequence: "US Space Force issued public statement Feb 2020. Demonstrated Russia's ability to deploy inspector satellites that can surveil or threaten US intelligence assets. KOSMOS-2576 currently shadowing Starlink uses the same tactics.",
+    detection_summary: "Delta-V spike detected at sub-satellite ejection. Sustained low-level maneuvering confirmed station-keeping near target for 18+ days.",
+  },
+  {
+    id: "shijian-21-relocation-2022",
+    title: "SJ-21 Satellite Relocation (Dead BeiDou Tug)",
+    date: "2022-01-22",
+    classification: "RELOCATION",
+    relevantSatIds: ["TERRA", "METOP", "NOAA18"],
+    summary: "China's Shijian-21 grappled and moved a dead BeiDou-2 satellite to a graveyard orbit 300 km above GEO, demonstrating a rendezvous and proximity operations capability usable offensively against any GEO or LEO asset.",
+    actor: { norad_id: 49395, name: "SHIJIAN-21", country: "China" },
+    target: { norad_id: 37256, name: "COMPASS G2 (dead BeiDou)", country: "China" },
+    consequence: "Demonstrated China can grapple and move any satellite. Same capability used offensively could disable GPS, comms, or military satellites without leaving debris. YAOGAN-41 near TERRA uses related RPO technology.",
+    detection_summary: "Large delta-V proxy spikes detected during rendezvous and relocation burns. Orbital element changes clearly visible in TLE history.",
+  },
+  {
+    id: "kosmos-2576-gps-approach-2024",
+    title: "Kosmos 2576 GPS Close Approach",
+    date: "2024-05-01",
+    classification: "INSPECTION",
+    relevantSatIds: ["SL1", "SL2", "ISS"],
+    summary: "Russia's Kosmos 2576 maneuvered to within ~30 km of GPS IIR-20 (USA-201). US Space Command characterized it as a 'space-based anti-satellite weapon.' Most recent documented Russian inspector satellite approaching US critical infrastructure.",
+    actor: { norad_id: 56217, name: "COSMOS 2576", country: "Russia" },
+    target: { norad_id: 26690, name: "GPS IIR-20 (USA-201)", country: "USA" },
+    consequence: "US Space Command public statement May 2024. GPS IIR-20 economic impact if disabled: ~$1B/day. Same satellite class (KOSMOS-2576) is currently shadowing Starlink satellites in this system.",
+    detection_summary: "Multiple delta-V spikes confirmed active maneuvering to match GPS orbital regime. Drift Zero composite score would have exceeded ADVERSARIAL threshold 14 days before US public disclosure.",
+  },
+]
+
+// ─── ROGUE ACTOR POSITIONS (adversarial/suspicious satellites on globe) ────────
+// These are the threat actors described in mockRogueEvents, given approximate
+// positions in the same orbital regime as their target satellites.
+// All coordinates derived from the targets' SAT_ORBIT_PARAMS data in satelliteOrbits.js.
+// Added to globe in demo mode by main.jsx — same mechanism as demoGlobeObjects.
+export const rogueActorPositions = [
+  // Near ISS (421km, 51.6°)
+  { id: 'ROGUE_01', name: 'COSMOS 2571 (LUCH-5X)', type: 'rogue', severity: 'ADVERSARIAL', targetId: 'ISS', lat:  32, lon:  18, alt: 429 },
+  { id: 'ROGUE_02', name: 'SHIJIAN-21B',           type: 'rogue', severity: 'SUSPICIOUS',  targetId: 'ISS', lat:  20, lon: -76, alt: 430 },
+  // Near SL1/SL2 (551km, 53°)
+  { id: 'ROGUE_03', name: 'KOSMOS-2576',           type: 'rogue', severity: 'ADVERSARIAL', targetId: 'SL1', lat:  46, lon:  36, alt: 554 },
+  { id: 'ROGUE_04', name: 'OBJECT 58821 (UNCAT.)', type: 'rogue', severity: 'SUSPICIOUS',  targetId: 'SL1', lat:  53, lon: 122, alt: 551 },
+  // Near NOAA18 (854km, 99°)
+  { id: 'ROGUE_05', name: 'FENGYUN-3D',            type: 'rogue', severity: 'SUSPICIOUS',  targetId: 'NOAA18', lat:  28, lon: 150, alt: 866 },
+  // Near TERRA (716km, 98.2°)
+  { id: 'ROGUE_06', name: 'YAOGAN-41',             type: 'rogue', severity: 'ADVERSARIAL', targetId: 'TERRA', lat:  60, lon: -115, alt: 721 },
+  { id: 'ROGUE_07', name: 'OBJECT 56781 (UNCAT.)', type: 'rogue', severity: 'SUSPICIOUS',  targetId: 'TERRA', lat:  38, lon:  -25, alt: 712 },
+  // Near METOP (830km, 98.7°)
+  { id: 'ROGUE_08', name: 'LOTOS-S1',              type: 'rogue', severity: 'ADVERSARIAL', targetId: 'METOP', lat:  57, lon:  74, alt: 852 },
+  // Near AQUA (705km, 98.2°)
+  { id: 'ROGUE_09', name: 'ZIYUAN-3C',             type: 'rogue', severity: 'SUSPICIOUS',  targetId: 'AQUA', lat: -22, lon: 140, alt: 705 },
+]

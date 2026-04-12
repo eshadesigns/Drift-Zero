@@ -249,6 +249,14 @@ export default function DashboardOverlay({ activated = false, noradId = 25544, d
                   />
                 </>
               )}
+              {/* ── Rogue Intelligence for selected satellite ───────────────── */}
+              <div style={{ margin: '4px 10px 0', borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 4 }} />
+              <RoguePanel
+                visible
+                demo={demo}
+                focusedSatId={focusedSatId}
+                compact
+              />
             </div>
           ) : (
             <>

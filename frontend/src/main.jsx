@@ -4,7 +4,7 @@ import './index.css'
 import GlobeView from './components/GlobeView'
 import DashboardOverlay from './App.jsx'
 import LandingOverlay from './components/LandingOverlay.jsx'
-import { demoGlobeObjects } from './data/mockData.js'
+import { demoGlobeObjects, rogueActorPositions } from './data/mockData.js'
 import { satStore } from './satStore.js'
 
 // Map NORAD ID → GlobeView entity ID (from SAT_TLES in GlobeView.jsx)
@@ -25,6 +25,7 @@ const GLOBE_ENTITY_IDS = new Set([
   'ISS', 'HST', 'SL1', 'SL2', 'NOAA18', 'TERRA', 'METOP', 'AQUA',
   ...Array.from({ length: 28 }, (_, i) => `DEB${i + 1}`),
   ...demoGlobeObjects.map(o => o.id),
+  ...rogueActorPositions.map(o => o.id),
 ])
 
 function App() {
@@ -35,6 +36,7 @@ function App() {
   const [focusedEntityId, setFocusedEntityId] = useState(null)
   const [showAllSats, setShowAllSats] = useState(false)
   const demoEntitiesRef = useRef([])
+  const rogueEntitiesRef = useRef([])
 
   // Hide entities + start globe rotation on load, stop on activate
   useEffect(() => {
@@ -125,6 +127,52 @@ function App() {
       // In non-showAll mode, hide demo objects by default unless they're the focused one
       entity.show = showAllSats || !focusedEntityId
       demoEntitiesRef.current.push(entity)
+    })
+  }, [activated, demoMode])
+
+  // Add adversarial/suspicious rogue actors to globe in demo mode
+  useEffect(() => {
+    if (!activated || !demoMode) return
+    const viewer = window._driftViewer
+    const Cesium = window.Cesium
+    if (!viewer || viewer.isDestroyed() || !Cesium) return
+
+    rogueEntitiesRef.current.forEach(e => {
+      if (!viewer.isDestroyed()) try { viewer.entities.remove(e) } catch {}
+    })
+    rogueEntitiesRef.current = []
+
+    rogueActorPositions.forEach(obj => {
+      const pos = Cesium.Cartesian3.fromDegrees(obj.lon, obj.lat, obj.alt * 1000)
+      const isAdversarial = obj.severity === 'ADVERSARIAL'
+      const dotColor   = isAdversarial ? '#ef4444' : '#f59e0b'
+      const labelColor = isAdversarial ? '#fca5a5' : '#fde68a'
+      const entity = viewer.entities.add({
+        id:       obj.id,
+        name:     obj.name,
+        position: pos,
+        point: {
+          pixelSize:                isAdversarial ? 8 : 6,
+          color:                    Cesium.Color.fromCssColorString(dotColor),
+          outlineColor:             Cesium.Color.fromCssColorString(dotColor).withAlpha(0.4),
+          outlineWidth:             2,
+          scaleByDistance:          new Cesium.NearFarScalar(1e6, 1.2, 2e7, 0.5),
+          disableDepthTestDistance: 0,
+        },
+        label: {
+          text:             obj.name,
+          font:             '10px Manrope, system-ui, sans-serif',
+          fillColor:        Cesium.Color.fromCssColorString(labelColor).withAlpha(0.85),
+          outlineColor:     Cesium.Color.BLACK,
+          outlineWidth:     2,
+          style:            Cesium.LabelStyle.FILL_AND_OUTLINE,
+          pixelOffset:      new Cesium.Cartesian2(0, -14),
+          scaleByDistance:  new Cesium.NearFarScalar(5e5, 1, 5e6, 0),
+          disableDepthTestDistance: 0,
+        },
+      })
+      entity.show = showAllSats || !focusedEntityId
+      rogueEntitiesRef.current.push(entity)
     })
   }, [activated, demoMode])
 
