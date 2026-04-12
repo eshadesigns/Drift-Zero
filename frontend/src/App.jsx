@@ -5,27 +5,71 @@ import ManeuverPanel from './components/dashboard/ManeuverPanel'
 import NaturalLanguageAlert from './components/dashboard/NaturalLanguageAlert'
 import CascadeAnalysis from './components/dashboard/CascadeAnalysis'
 import SatelliteModal from './components/SatelliteModal'
+import RoguePanel from './components/RoguePanel'
 import { satStore } from './satStore'
+import { fetchConjunctions } from './api/shield'
+import {
+  conjunctions as mockConjunctions,
+  fleetStats as mockFleetStats,
+  naturalLanguageAlerts as mockAlerts,
+} from './data/mockData'
 
 const PANEL_MIN = 15   // % of screen width
 const PANEL_MAX = 55
 const DEFAULT_PANEL = 30
 
-export default function DashboardOverlay({ activated = false }) {
+// NORAD ID of the primary satellite to analyse. Override via .env VITE_SHIELD_NORAD_ID.
+const PRIMARY_NORAD_ID = Number(import.meta.env.VITE_SHIELD_NORAD_ID ?? 25544)
+
+export default function DashboardOverlay() {
+  // ── Live data state — initialised with mock so the UI renders immediately ────
+  const [conjunctions, setConjunctions] = useState(mockConjunctions)
+  const [stats, setStats] = useState(mockFleetStats)
+  // NL alerts come from the Claude API (not yet wired); fall back to mock entries
+  // so the panel still renders for known mock conjunction IDs.
+  const [alerts, setAlerts] = useState(mockAlerts)
+  const [isLive, setIsLive] = useState(false)
+
+  // ── Fetch from Shield API on mount ───────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false
+
+    async function load() {
+      try {
+        const { conjunctions: live, stats: derived } = await fetchConjunctions({
+          noradId: PRIMARY_NORAD_ID,
+          minRisk: 0,
+          limit: 100,
+        })
+        if (cancelled) return
+        // API responded — mark as live regardless of event count.
+        setIsLive(true)
+        // Only replace mock conjunctions if the pipeline returned real events.
+        // An empty response (pipeline ran but found nothing) keeps mock data
+        // visible so the UI isn't blank during a demo.
+        if (live.length > 0) {
+          setConjunctions(live)
+          setAlerts([])
+        }
+        // Always merge stats regardless of event count.
+        setStats({ ...mockFleetStats, ...derived })
+      } catch {
+        // API unreachable or pipeline error — keep mock data already in state.
+        setIsLive(false)
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
+  }, [])
+
+  const [activeMode, setActiveMode] = useState('shield') // 'shield' | 'rogue'
   const [selectedConjunction, setSelectedConjunction] = useState(null)
   const [panelPct, setPanelPct] = useState(DEFAULT_PANEL)
-  const [collapsed, setCollapsed] = useState('panels') // start hidden, open on activate
-
-  // Slide panels in after activation
-  useEffect(() => {
-    if (activated) {
-      const t = setTimeout(() => setCollapsed(null), 300)
-      return () => clearTimeout(t)
-    }
-  }, [activated])
+  const [collapsed, setCollapsed] = useState(null) // null | 'panels'
   const [isDragging, setIsDragging] = useState(false)
   const [dividerHover, setDividerHover] = useState(false)
-  const tabDragMoved = useRef(false) // tracks whether tab mousedown became a drag
+  const tabDragMoved = useRef(false)
 
   // ── Satellite selection from GlobeView ────────────────────────────────────
   const [selectedSat, setSelectedSat] = useState(null)
@@ -95,15 +139,12 @@ export default function DashboardOverlay({ activated = false }) {
 
   return (
     <>
-      {/* ── StatsBar — top (hidden until activated) ─────────────────────────── */}
+      {/* ── StatsBar — top ───────────────────────────────────────────────────── */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
-        pointerEvents: activated ? 'auto' : 'none',
-        opacity: activated ? 1 : 0,
-        transform: activated ? 'translateY(0)' : 'translateY(-100%)',
-        transition: 'opacity 0.5s ease 0.4s, transform 0.5s ease 0.4s',
+        pointerEvents: 'auto',
       }}>
-        <StatsBar />
+        <StatsBar stats={stats} isLive={isLive} />
       </div>
 
       {/* ── Right panel ──────────────────────────────────────────────────────── */}
@@ -131,8 +172,6 @@ export default function DashboardOverlay({ activated = false }) {
           flexDirection: 'column',
         }}>
           {selectedSat ? (
-            /* ── Satellite selected: show satellite info panel ── */
-            /* key forces remount + re-animation on each new satellite */
             <SatelliteModal
               key={selectedSat.id}
               sat={selectedSat}
@@ -143,27 +182,79 @@ export default function DashboardOverlay({ activated = false }) {
               inline
             />
           ) : (
-            /* ── Default: conjunction queue + detail panels ── */
             <>
-              <AlertQueue
-                selected={selectedConjunction}
-                onSelect={setSelectedConjunction}
-              />
-              {selectedConjunction && (
-                <>
-                  <NaturalLanguageAlert conjunction={selectedConjunction} />
-                  <ManeuverPanel conjunction={selectedConjunction} />
-                  <CascadeAnalysis conjunction={selectedConjunction} />
-                </>
-              )}
+              {/* ── Mode tab bar — sticky so it stays visible while scrolling ── */}
+              <div style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+                display: 'flex',
+                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                background: 'rgba(3,7,18,0.97)',
+                flexShrink: 0,
+              }}>
+                {['shield', 'rogue'].map(mode => {
+                  const active = activeMode === mode
+                  return (
+                    <button
+                      key={mode}
+                      onClick={() => {
+                        setActiveMode(mode)
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '9px 0',
+                        background: 'none',
+                        border: 'none',
+                        borderBottom: active
+                          ? '2px solid #22d3ee'
+                          : '2px solid transparent',
+                        color: active ? '#22d3ee' : '#475569',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        letterSpacing: '0.12em',
+                        textTransform: 'uppercase',
+                        cursor: 'pointer',
+                        transition: 'color 0.15s, border-color 0.15s',
+                      }}
+                    >
+                      {mode}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* ── Mode content ─────────────────────────────────────────────── */}
+              {/* Both panels stay mounted — display:none preserves fetched data
+                  across tab switches and prevents duplicate API/Claude calls. */}
+              <div style={{ display: activeMode === 'shield' ? 'contents' : 'none' }}>
+                <AlertQueue
+                  conjunctions={conjunctions}
+                  selected={selectedConjunction}
+                  onSelect={setSelectedConjunction}
+                />
+                {selectedConjunction && (
+                  <>
+                    <NaturalLanguageAlert
+                      conjunction={selectedConjunction}
+                      alerts={alerts}
+                    />
+                    <ManeuverPanel conjunction={selectedConjunction} />
+                    <CascadeAnalysis conjunction={selectedConjunction} />
+                  </>
+                )}
+              </div>
+              <div style={{ display: activeMode === 'rogue' ? 'contents' : 'none' }}>
+                <RoguePanel />
+              </div>
             </>
           )}
         </div>
       </div>
 
-      {/* ── Divider — hidden until activated ────────────────────────────────── */}
+      {/* ── Divider — drag strip + always-visible collapse tab ───────────────── */}
       <div
-        onMouseDown={activated ? onDividerMouseDown : undefined}
+        onMouseDown={onDividerMouseDown}
         onMouseEnter={() => setDividerHover(true)}
         onMouseLeave={() => setDividerHover(false)}
         style={{
@@ -175,8 +266,7 @@ export default function DashboardOverlay({ activated = false }) {
           zIndex: 11,
           cursor: 'col-resize',
           transition,
-          opacity: activated ? 1 : 0,
-          pointerEvents: activated ? 'auto' : 'none',
+          pointerEvents: 'auto',
           background: isDragging
             ? 'rgba(34,211,238,0.3)'
             : dividerHover
@@ -184,17 +274,14 @@ export default function DashboardOverlay({ activated = false }) {
               : 'transparent',
         }}
       >
-        {/* Always-visible collapse/expand tab */}
         <button
           onMouseDown={(e) => {
             e.stopPropagation()
             tabDragMoved.current = false
-            // Start the drag — if mouse never moves, we treat it as a click
             setIsDragging(true)
             setCollapsed(null)
           }}
           onClick={(e) => {
-            // Only toggle if the mousedown didn't turn into a real drag
             if (!tabDragMoved.current) toggleCollapse()
           }}
           style={{
@@ -231,7 +318,6 @@ export default function DashboardOverlay({ activated = false }) {
         </button>
       </div>
 
-      {/* Cursor style during drag */}
       {isDragging && (
         <style>{`* { cursor: col-resize !important; user-select: none !important; }`}</style>
       )}
