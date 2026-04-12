@@ -258,6 +258,28 @@ export default function GlobeView() {
           creditContainer:       document.createElement('div'),
         })
         viewerRef.current = viewer
+        window._driftViewer = viewer   // expose for landing → dashboard activation
+
+        // Zoom to a satellite by NORAD ID — called from landing page on Track
+        window._driftFocusSat = (noradId) => {
+          if (!noradId) return
+          const sat = SAT_TLES.find(s => String(s.noradId) === String(noradId))
+          if (!sat) return
+          try {
+            const satrec = satellite.twoline2satrec(sat.tle1, sat.tle2)
+            const now = new Date()
+            const pv = satellite.propagate(satrec, now)
+            if (!pv?.position) return
+            const gmst = satellite.gstime(now)
+            const geo = satellite.eciToGeodetic(pv.position, gmst)
+            const dest = Cesium.Cartesian3.fromRadians(
+              geo.longitude,
+              geo.latitude,
+              geo.height * 1000 + 2_500_000  // 2500km above satellite
+            )
+            viewer.camera.flyTo({ destination: dest, duration: 2.5 })
+          } catch (e) { console.warn('_driftFocusSat error', e) }
+        }
 
         // ── Globe styling ───────────────────────────────────────────────────
         viewer.scene.globe.enableLighting         = true
