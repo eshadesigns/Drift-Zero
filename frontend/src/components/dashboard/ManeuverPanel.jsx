@@ -1,10 +1,17 @@
-import { useState } from 'react'
-import { maneuvers } from '../../data/mockData'
+import { useState, useEffect } from 'react'
+import { fetchManeuvers } from '../../api/shield'
 
-const OPTION_COLORS = {
-  A: { base: '#f87171', bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.25)' },
-  B: { base: '#22d3ee', bg: 'rgba(34,211,238,0.08)', border: 'rgba(34,211,238,0.25)' },
-  C: { base: '#86efac', bg: 'rgba(134,239,172,0.08)', border: 'rgba(134,239,172,0.25)' },
+// Position 0 = highest composite_score, maps to colour slot A, B, C
+const OPTION_COLORS = [
+  { base: '#f87171', bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.25)' },
+  { base: '#22d3ee', bg: 'rgba(34,211,238,0.08)',  border: 'rgba(34,211,238,0.25)'  },
+  { base: '#86efac', bg: 'rgba(134,239,172,0.08)', border: 'rgba(134,239,172,0.25)' },
+]
+
+const OPTION_IDS = ['A', 'B', 'C']
+
+function labelToSlug(label) {
+  return label.toLowerCase().replace(/\s+/g, '_')
 }
 
 function formatCost(n) {
@@ -12,15 +19,52 @@ function formatCost(n) {
   return `$${n}`
 }
 
-function formatProb(p) {
-  return p.toExponential(2)
-}
-
-export default function ManeuverPanel({ conjunction }) {
-  const entry = maneuvers.find(m => m.conjunctionId === conjunction.id)
+export default function ManeuverPanel({ conjunction, onManeuverSelect }) {
+  const [options, setOptions]   = useState(null)
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState(null)
   const [selected, setSelected] = useState(null)
 
-  if (!entry) return null
+  useEffect(() => {
+    if (!conjunction) return
+    let cancelled = false
+    setOptions(null)
+    setError(null)
+    setSelected(null)
+    onManeuverSelect?.(null)
+    setLoading(true)
+
+    fetchManeuvers(conjunction.primarySatId, conjunction.id)
+      .then(data => {
+        if (!cancelled) setOptions(data.maneuver_options ?? [])
+      })
+      .catch(err => {
+        if (!cancelled) setError(err.message)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [conjunction?.id])
+
+  if (!conjunction) return null
+
+  if (loading) return (
+    <div style={{ margin: '0 10px 6px', padding: '16px', fontSize: 11, color: '#475569', textAlign: 'center' }}>
+      Loading maneuver options…
+    </div>
+  )
+
+  if (error) return (
+    <div style={{ margin: '0 10px 6px', padding: '12px 14px', borderRadius: 6,
+      background: 'rgba(248,113,113,0.07)', border: '1px solid rgba(248,113,113,0.2)',
+      fontSize: 11, color: '#f87171' }}>
+      Maneuver fetch failed: {error}
+    </div>
+  )
+
+  if (!options || options.length === 0) return null
 
   return (
     <div style={{
@@ -42,13 +86,20 @@ export default function ManeuverPanel({ conjunction }) {
 
       {/* Options */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {entry.options.map((opt) => {
-          const c = OPTION_COLORS[opt.id]
-          const isSelected = selected === opt.id
+        {options.map((opt, idx) => {
+          const c        = OPTION_COLORS[idx] ?? OPTION_COLORS[2]
+          const optId    = OPTION_IDS[idx] ?? String(idx + 1)
+          const slug     = labelToSlug(opt.label)
+          const isSelected = selected === idx
+
           return (
             <div
-              key={opt.id}
-              onClick={() => setSelected(isSelected ? null : opt.id)}
+              key={opt.label}
+              onClick={() => {
+                const next = isSelected ? null : idx
+                setSelected(next)
+                onManeuverSelect?.(next === null ? null : slug)
+              }}
               style={{
                 borderRadius: 5,
                 background: isSelected ? c.bg : 'rgba(255,255,255,0.02)',
@@ -66,34 +117,24 @@ export default function ManeuverPanel({ conjunction }) {
                     color: c.base, background: `${c.base}18`,
                     borderRadius: 3, padding: '1px 6px', letterSpacing: '0.06em',
                   }}>
-                    {opt.id}
+                    {optId}
                   </span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: '#e2e8f0' }}>
                     {opt.label}
                   </span>
-                  {opt.cascadeRiskCreated && (
-                    <span style={{
-                      fontSize: 9, color: '#fbbf24',
-                      background: 'rgba(251,191,36,0.12)',
-                      borderRadius: 3, padding: '1px 5px', letterSpacing: '0.06em',
-                    }}>
-                      CASCADE
-                    </span>
-                  )}
                 </div>
-                <span style={{ fontSize: 13, fontWeight: 700, color: c.base }}>
-                  {opt.riskReductionPct}%
+                <span style={{ fontSize: 11, fontWeight: 700, color: c.base, fontVariantNumeric: 'tabular-nums' }}>
+                  +{opt.miss_increase_km} km
                 </span>
               </div>
 
               {/* Metrics grid */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px 8px' }}>
-                <Metric label="ΔV" value={`${opt.deltaVms} m/s`} />
-                <Metric label="Fuel" value={`${opt.fuelKg} kg`} />
-                <Metric label="Cost" value={formatCost(opt.costUSD)} />
-                <Metric label="New P(c)" value={formatProb(opt.newProbability)} />
-                <Metric label="Lifespan −" value={`${opt.lifespanImpactDays}d`} />
-                <Metric label="Window" value={`${opt.executionWindowMin}m`} />
+                <Metric label="ΔV"         value={`${opt.delta_v_ms} m/s`} />
+                <Metric label="Fuel"        value={`${opt.fuel_kg} kg`} />
+                <Metric label="Cost"        value={formatCost(opt.fuel_cost_usd)} />
+                <Metric label="Lifespan −"  value={`${opt.lifespan_reduction_days}d`} />
+                <Metric label="Score"       value={opt.composite_score.toFixed(2)} />
               </div>
 
               {/* Execute button (only when selected) */}
@@ -109,10 +150,10 @@ export default function ManeuverPanel({ conjunction }) {
                   }}
                   onClick={(e) => {
                     e.stopPropagation()
-                    alert(`Maneuver Option ${opt.id} — ${opt.label}\nΔV: ${opt.deltaVms} m/s | Fuel: ${opt.fuelKg} kg\nCost: ${formatCost(opt.costUSD)}\n\n(Demo — no backend connected)`)
+                    alert(`Maneuver Option ${optId} — ${opt.label}\nΔV: ${opt.delta_v_ms} m/s | Fuel: ${opt.fuel_kg} kg\nCost: ${formatCost(opt.fuel_cost_usd)}\n\n(Demo — no backend connected)`)
                   }}
                 >
-                  Execute Option {opt.id}
+                  Execute Option {optId}
                 </button>
               )}
             </div>

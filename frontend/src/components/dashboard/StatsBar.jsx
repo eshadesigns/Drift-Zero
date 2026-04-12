@@ -1,5 +1,3 @@
-import { fleetStats } from '../../data/mockData'
-
 const S = {
   bar: {
     height: 44,
@@ -88,8 +86,15 @@ const severity = {
   normal: '#94a3b8',
 }
 
-export default function StatsBar() {
-  const probDisplay = (fleetStats.avgCollisionProb * 100).toExponential(2) + '%'
+export default function StatsBar({ stats = {} }) {
+  const {
+    activeSatellites   = 0,
+    activeConjunctions = 0,
+    criticalAlerts     = 0,
+    avgCollisionProb   = 0,
+  } = stats
+
+  const probDisplay = (avgCollisionProb * 100).toExponential(2) + '%'
 
   return (
     <div style={S.bar}>
@@ -105,32 +110,22 @@ export default function StatsBar() {
       <div style={S.stats}>
         <div style={S.stat}>
           <span style={S.statLabel}>Active Sats</span>
-          <span style={{ ...S.statValue, color: '#94a3b8' }}>{fleetStats.activeSatellites}</span>
+          <span style={{ ...S.statValue, color: '#94a3b8' }}>{activeSatellites}</span>
         </div>
         <div style={S.divider} />
         <div style={S.stat}>
           <span style={S.statLabel}>Conjunctions</span>
-          <span style={{ ...S.statValue, color: severity.high }}>{fleetStats.activeConjunctions}</span>
+          <span style={{ ...S.statValue, color: severity.high }}>{activeConjunctions}</span>
         </div>
         <div style={S.divider} />
         <div style={S.stat}>
           <span style={S.statLabel}>Critical</span>
-          <span style={{ ...S.statValue, color: severity.critical }}>{fleetStats.criticalAlerts}</span>
+          <span style={{ ...S.statValue, color: severity.critical }}>{criticalAlerts}</span>
         </div>
         <div style={S.divider} />
         <div style={S.stat}>
           <span style={S.statLabel}>Avg P(collision)</span>
           <span style={{ ...S.statValue, color: severity.medium }}>{probDisplay}</span>
-        </div>
-        <div style={S.divider} />
-        <div style={S.stat}>
-          <span style={S.statLabel}>Tracked Objects</span>
-          <span style={{ ...S.statValue, color: '#94a3b8' }}>{fleetStats.totalTrackedObjects.toLocaleString()}</span>
-        </div>
-        <div style={S.divider} />
-        <div style={S.stat}>
-          <span style={S.statLabel}>Maneuvers / mo</span>
-          <span style={{ ...S.statValue, color: '#94a3b8' }}>{fleetStats.maneuversThisMonth}</span>
         </div>
       </div>
 
