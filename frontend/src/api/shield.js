@@ -44,6 +44,15 @@ export function normalizeConjunction(event) {
     confidence:           event.confidence,
     kpIndex:              event.kp_index,
     dataAgeMinutes:       event.data_age_minutes,
+    primaryTleLine1:      event.primary.tle_line1  ?? '',
+    primaryTleLine2:      event.primary.tle_line2  ?? '',
+    secondaryTleLine1:    event.secondary.tle_line1 ?? '',
+    secondaryTleLine2:    event.secondary.tle_line2 ?? '',
+    secondaryInclinationDeg: event.secondary.inclination_deg ?? null,
+    secondaryApoapsisKm:     event.secondary.apoapsis_km     ?? null,
+    secondaryPeriapsisKm:    event.secondary.periapsis_km    ?? null,
+    secondaryCountryCode:    event.secondary.country_code    ?? '',
+    secondaryLaunchDate:     event.secondary.launch_date     ?? '',
   }
 }
 
@@ -64,12 +73,41 @@ export function deriveStats(conjunctions) {
 }
 
 // ── Fetch conjunctions from Shield API ───────────────────────────────────────
-// Returns { conjunctions, stats } on success, or throws so the caller can fall back.
-export async function fetchConjunctions({ minRisk = 0, limit = 100 } = {}) {
-  const url = `${BASE_URL}/conjunctions?min_risk=${minRisk}&limit=${limit}`
+// noradId is required. Returns { conjunctions, stats } or throws.
+export async function fetchConjunctions({ noradId, minRisk = 0, limit = 100 } = {}) {
+  const url = `${BASE_URL}/conjunctions/${noradId}?min_risk=${minRisk}&limit=${limit}`
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Shield API ${res.status}: ${res.statusText}`)
   const data = await res.json()
   const conjunctions = (data.events ?? []).map(normalizeConjunction)
   return { conjunctions, stats: deriveStats(conjunctions) }
+}
+
+// ── Fetch satellite info (name, TLE, orbital params) ─────────────────────────
+// Returns the /satellite/{norad_id} response directly.
+export async function fetchSatellite(noradId) {
+  const url = `${BASE_URL}/satellite/${noradId}`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Shield API ${res.status}: ${res.statusText}`)
+  return res.json()
+}
+
+// ── Fetch maneuver options for a conjunction event ────────────────────────────
+// Returns { event_id, norad_id, primary_name, current_miss_km, maneuver_options }
+export async function fetchManeuvers(noradId, eventId) {
+  const url = `${BASE_URL}/maneuvers/${noradId}/${eventId}`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Shield API ${res.status}: ${res.statusText}`)
+  return res.json()
+}
+
+// ── Fetch cascade risks for a maneuver choice ─────────────────────────────────
+// maneuverLabel must be a slug: maximum_safety | balanced | fuel_efficient
+// Returns { event_id, norad_id, primary_name, maneuver_label, delta_v_ms,
+//           candidates_screened, cascade_risks }
+export async function fetchCascade(noradId, eventId, maneuverLabel) {
+  const url = `${BASE_URL}/cascade/${noradId}/${eventId}/${maneuverLabel}`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Shield API ${res.status}: ${res.statusText}`)
+  return res.json()
 }
