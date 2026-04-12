@@ -2,7 +2,7 @@
 backend/api.py
 
 Drift Zero unified API — rogue anomaly events and conjunction events,
-each enriched with a Claude-generated plain-English threat summary.
+each enriched with an OpenAI-generated plain-English threat summary.
 
 Endpoints
 ---------
@@ -11,7 +11,7 @@ Endpoints
 
 Environment
 -----------
-  ANTHROPIC_API_KEY   — required for Claude summaries
+  OPENAI_API_KEY      — required for OpenAI summaries
   SPACETRACK_EMAIL / SPACETRACK_PASSWORD — required for Shield pipeline
 """
 
@@ -21,7 +21,7 @@ import logging
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from anthropic import Anthropic
+from openai import OpenAI
 from dotenv import load_dotenv
 
 from run_rogue import run
@@ -40,8 +40,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_claude = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-_MODEL = "claude-sonnet-4-20250514"
+_openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+_MODEL = "gpt-4o-mini"
 
 # ── Prompt builders ───────────────────────────────────────────────────────────
 
@@ -86,22 +86,22 @@ def _conjunction_prompt(e: dict) -> str:
     )
 
 
-# ── Claude call ───────────────────────────────────────────────────────────────
+# ── OpenAI call ───────────────────────────────────────────────────────────────
 
 def _summarise(prompt: str) -> str | None:
     """
-    Send prompt to Claude and return the response text.
+    Send prompt to OpenAI and return the response text.
     Returns None on any failure so the calling endpoint still responds.
     """
     try:
-        msg = _claude.messages.create(
+        msg = _openai.chat.completions.create(
             model=_MODEL,
             max_tokens=200,
             messages=[{"role": "user", "content": prompt}],
         )
-        return msg.content[0].text.strip()
+        return msg.choices[0].message.content.strip()
     except Exception as exc:
-        log.warning("Claude summary failed: %s", exc)
+        log.warning("OpenAI summary failed: %s", exc)
         return None
 
 
