@@ -20,15 +20,15 @@ function formatCost(n) {
 }
 
 export default function ManeuverPanel({ conjunction, onManeuverSelect }) {
-  const [options, setOptions]   = useState(null)
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState(null)
-  const [selected, setSelected] = useState(null)
+  const [maneuverData, setManeuverData] = useState(null)
+  const [loading, setLoading]           = useState(false)
+  const [error, setError]               = useState(null)
+  const [selected, setSelected]         = useState(null)
 
   useEffect(() => {
     if (!conjunction) return
     let cancelled = false
-    setOptions(null)
+    setManeuverData(null)
     setError(null)
     setSelected(null)
     onManeuverSelect?.(null)
@@ -36,7 +36,7 @@ export default function ManeuverPanel({ conjunction, onManeuverSelect }) {
 
     fetchManeuvers(conjunction.primarySatId, conjunction.id)
       .then(data => {
-        if (!cancelled) setOptions(data.maneuver_options ?? [])
+        if (!cancelled) setManeuverData(data)
       })
       .catch(err => {
         if (!cancelled) setError(err.message)
@@ -47,6 +47,8 @@ export default function ManeuverPanel({ conjunction, onManeuverSelect }) {
 
     return () => { cancelled = true }
   }, [conjunction?.id])
+
+  const options = maneuverData?.maneuver_options ?? null
 
   if (!conjunction) return null
 
@@ -80,7 +82,7 @@ export default function ManeuverPanel({ conjunction, onManeuverSelect }) {
           Maneuver Options
         </span>
         <span style={{ fontSize: 10, color: '#334155', fontVariantNumeric: 'tabular-nums' }}>
-          {conjunction.id.slice(-3)}
+          current miss {maneuverData?.current_miss_km?.toFixed(2)} km
         </span>
       </div>
 

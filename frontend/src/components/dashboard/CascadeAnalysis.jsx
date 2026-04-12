@@ -133,7 +133,7 @@ export default function CascadeAnalysis({ conjunction, conjunctions = [], select
                         </span>
                       )}
                       <span style={{ fontSize: 10, color: '#64748b' }}>
-                        {new Date(cr.tca_utc).toISOString().slice(11, 16)} UTC
+                        {cr.tca_utc ? new Date(cr.tca_utc).toISOString().slice(11, 16) + ' UTC' : ''}
                       </span>
                     </div>
                   </div>

@@ -4,13 +4,27 @@ from sklearn.ensemble import IsolationForest
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from rogue.pol_model import SatelliteBaseline
+from backend.rogue.pol_model import SatelliteBaseline
 
 FEATURE_KEYS = [
     'delta_mean_motion', 'delta_eccentricity', 'delta_inclination',
     'delta_bstar', 'delta_v_proxy', 'time_gap_hours',
     'solar_f107', 'kp_index'
 ]
+
+# Satellites operated by known cooperative/civil agencies whose maneuvers
+# are publicly tracked and operationally expected. Anomalies are still flagged
+# (the maneuver is real) but intent cannot be classified as ADVERSARIAL.
+_COOPERATIVE_NORADS: set[int] = {
+    25544,   # ISS — NASA/Roscosmos/ESA/JAXA/CSA
+    48274,   # CSS (Tiangong) — CMSA
+    20580,   # HST (Hubble Space Telescope) — NASA
+    43205,   # NOAA-20
+    33591,   # NOAA-19
+    28654,   # NOAA-18
+    27424,   # Aqua — NASA
+    25994,   # Terra — NASA
+}
 
 @dataclass
 class AnomalyEvent:
@@ -64,7 +78,12 @@ class AnomalyDetector:
         elif composite < 0.72:
             severity = "SUSPICIOUS"
         else:
-            severity = "ADVERSARIAL"
+            # Cooperative satellites can show large maneuvers for legitimate
+            # operational reasons. Flag the anomaly but cap intent at SUSPICIOUS.
+            if norad_id in _COOPERATIVE_NORADS:
+                severity = "SUSPICIOUS"
+            else:
+                severity = "ADVERSARIAL"
 
         # Update baseline
         if baseline:

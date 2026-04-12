@@ -5,61 +5,72 @@ import ManeuverPanel from './components/dashboard/ManeuverPanel'
 import NaturalLanguageAlert from './components/dashboard/NaturalLanguageAlert'
 import CascadeAnalysis from './components/dashboard/CascadeAnalysis'
 import SatelliteModal from './components/SatelliteModal'
+import RoguePanel from './components/RoguePanel'
 import { satStore } from './satStore'
-import { fetchConjunctions, fetchSatellite } from './api/shield'
+import { fetchConjunctions, fetchSatellite, deriveStats } from './api/shield'
+import { conjunctions as mockConjunctions } from './data/mockData.js'
 
 const PANEL_MIN = 15   // % of screen width
 const PANEL_MAX = 55
 const DEFAULT_PANEL = 30
-
-const EMPTY_STATS = { activeSatellites: 0, activeConjunctions: 0, criticalAlerts: 0, avgCollisionProb: 0 }
+const EMPTY_STATS = { activeSatellites: 0, activeConjunctions: 0, criticalAlerts: 0, maxCollisionProb: 0 }
 
 export default function DashboardOverlay({ activated = false, noradId = null }) {
+  const [activeMode, setActiveMode] = useState('shield')   // 'shield' | 'rogue'
   const [selectedConjunction, setSelectedConjunction] = useState(null)
+  const [selectedManeuver, setSelectedManeuver] = useState(null)  // slug for cascade
   const [panelPct, setPanelPct] = useState(DEFAULT_PANEL)
   const [collapsed, setCollapsed] = useState('panels') // start hidden, open on activate
 
-  // Slide panels in after activation
-  useEffect(() => {
-    if (activated) {
-      const t = setTimeout(() => setCollapsed(null), 300)
-      return () => clearTimeout(t)
-    }
-  }, [activated])
-  const [isDragging, setIsDragging] = useState(false)
-  const [dividerHover, setDividerHover] = useState(false)
-  const tabDragMoved = useRef(false) // tracks whether tab mousedown became a drag
-
-  // ── Live conjunction data ──────────────────────────────────────────────────
-  // Starts null — nothing loads until the user submits a NORAD ID.
-  const [selectedNoradId, setSelectedNoradId] = useState(null)
-  const [primarySatTle, setPrimarySatTle] = useState(null)
+  // ── Shield data ─────────────────────────────────────────────────────────────
+  const [selectedNoradId, setSelectedNoradId] = useState(noradId)
+  const [conjunctions, setConjunctions] = useState([])
+  const [conjunctionsLoading, setConjunctionsLoading] = useState(false)
+  const [stats, setStats] = useState(EMPTY_STATS)
+  const [isLive, setIsLive] = useState(false)
 
   useEffect(() => {
     if (noradId && noradId !== selectedNoradId) setSelectedNoradId(noradId)
   }, [noradId])
-  const [conjunctions, setConjunctions] = useState([])
-  const [stats, setStats] = useState(EMPTY_STATS)
-  const [loading, setLoading] = useState(false)
-  const [selectedManeuverLabel, setSelectedManeuverLabel] = useState(null)
 
   useEffect(() => {
-    if (!selectedNoradId) return   // wait for user to submit a NORAD ID
+    if (!selectedNoradId) return
     let cancelled = false
+    setConjunctionsLoading(true)
+    setConjunctions([])
+    setSelectedConjunction(null)
+    setSelectedManeuver(null)
+    setIsLive(false)
+
+    const controller = new AbortController()
 
     const load = async () => {
-      setLoading(true)
       try {
-        // Step 1 — fetch primary satellite TLE and info independently.
-        // This succeeds even if there are 0 active conjunctions, so the globe
-        // always renders the primary satellite when a NORAD ID is entered.
+        const { conjunctions: live, stats: liveStats } = await fetchConjunctions(
+          selectedNoradId, { minRisk: 0, limit: 100 }, controller.signal
+        )
+        if (cancelled) return
+        setIsLive(true)
+        setStats(prev => ({ ...prev, ...liveStats }))
+        setConjunctions(live.length > 0 ? live : (mockConjunctions ?? []))
+      } catch (err) {
+        if (cancelled || err.name === 'AbortError') return
+        setConjunctions(mockConjunctions ?? [])
+      } finally {
+        if (!cancelled) setConjunctionsLoading(false)
+      }
+
+      // Fetch satellite TLE for globe rendering — non-fatal if endpoint missing
+      if (cancelled) return
+      try {
         const satInfo = await fetchSatellite(selectedNoradId)
+        if (cancelled) return
+
         const primaryTle = {
-          name:      satInfo.name,
-          norad_id:  selectedNoradId,
-          tle_line1: satInfo.tle_line1,
-          tle_line2: satInfo.tle_line2,
-          // Orbital params forwarded to SatelliteModal via dynMeta
+          name:        satInfo.name,
+          norad_id:    selectedNoradId,
+          tle_line1:   satInfo.tle_line1,
+          tle_line2:   satInfo.tle_line2,
           alt:         (satInfo.apoapsis_km != null && satInfo.periapsis_km != null)
                          ? Math.round((parseFloat(satInfo.apoapsis_km) + parseFloat(satInfo.periapsis_km)) / 2)
                          : null,
@@ -70,77 +81,40 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
           object_type: satInfo.object_type     || null,
         }
 
-        // Step 2 — fetch conjunctions for threat satellites.
-        const result = await fetchConjunctions({ noradId: selectedNoradId })
+        const seen = new Set()
+        const threatTles = conjunctions
+          .filter(c => c.secondaryTleLine1 && c.secondaryTleLine2)
+          .map(c => ({
+            name:        c.secondarySatName,
+            norad_id:    c.secondarySatId,
+            tle_line1:   c.secondaryTleLine1,
+            tle_line2:   c.secondaryTleLine2,
+            alt:         (c.secondaryApoapsisKm != null && c.secondaryPeriapsisKm != null)
+                           ? Math.round((parseFloat(c.secondaryApoapsisKm) + parseFloat(c.secondaryPeriapsisKm)) / 2)
+                           : null,
+            inclination: c.secondaryInclinationDeg != null ? +parseFloat(c.secondaryInclinationDeg).toFixed(2) : null,
+            country:     c.secondaryCountryCode || null,
+            launched:    c.secondaryLaunchDate  || null,
+            object_type: 'satellite',
+          }))
+          .filter(t => { if (seen.has(t.norad_id)) return false; seen.add(t.norad_id); return true })
 
-        if (!cancelled) {
-          setPrimarySatTle(primaryTle)
-          setConjunctions(result.conjunctions)
-          setStats(result.stats)
-          // Reset selection — event_ids from the old run are now invalid
-          setSelectedConjunction(null)
-          setSelectedManeuverLabel(null)
-
-          // Build threat TLE list from conjunction secondaries (may be empty).
-          const seen = new Set()
-          const threatTles = result.conjunctions
-            .filter(c => c.secondaryTleLine1 && c.secondaryTleLine2)
-            .map(c => ({
-              name:      c.secondarySatName,
-              norad_id:  c.secondarySatId,
-              tle_line1: c.secondaryTleLine1,
-              tle_line2: c.secondaryTleLine2,
-              // Orbital params forwarded to SatelliteModal via dynMeta
-              alt:         (c.secondaryApoapsisKm != null && c.secondaryPeriapsisKm != null)
-                             ? Math.round((parseFloat(c.secondaryApoapsisKm) + parseFloat(c.secondaryPeriapsisKm)) / 2)
-                             : null,
-              inclination: c.secondaryInclinationDeg != null ? +parseFloat(c.secondaryInclinationDeg).toFixed(2) : null,
-              country:     c.secondaryCountryCode || null,
-              launched:    c.secondaryLaunchDate  || null,
-              object_type: 'satellite',
-            }))
-            .filter(t => { if (seen.has(t.norad_id)) return false; seen.add(t.norad_id); return true })
-
-          console.log(
-            `[DriftZero] NORAD ${selectedNoradId} — ${result.conjunctions.length} conjunction event(s),`,
-            `${threatTles.length} unique threat satellite(s)`
-          )
-
-          // Render primary + threats on the globe.
-          // threatTles may be [] (0 conjunctions) — _driftRenderConjunction handles
-          // that correctly by removing any old threat satellites from the scene.
-          // If Cesium is already up (typical on refresh), call directly to avoid
-          // a 200ms poll delay and ensure the call isn't lost if `cancelled` flips
-          // while a poll interval is still pending.
-          const renderGlobe = () => window._driftRenderConjunction(primaryTle, threatTles)
-
-          if (typeof window._driftRenderConjunction === 'function') {
-            console.log(
-              '[DriftZero] rendering', primaryTle.name, '+', threatTles.length, 'threats'
-            )
-            renderGlobe()
-          } else {
-            // First load: Cesium may still be initialising — poll until ready
-            const started = Date.now()
-            const globePoll = setInterval(() => {
-              if (typeof window._driftRenderConjunction === 'function') {
-                clearInterval(globePoll)
-                console.log(
-                  '[DriftZero] _driftRenderConjunction ready — rendering',
-                  primaryTle.name, '+', threatTles.length, 'threats'
-                )
-                renderGlobe()
-              } else if (Date.now() - started > 10_000) {
-                clearInterval(globePoll)
-                console.warn('[DriftZero] _driftRenderConjunction not found after 10s — Cesium may have failed to load')
-              }
-            }, 200)
-          }
+        const renderGlobe = () => window._driftRenderConjunction?.(primaryTle, threatTles)
+        if (typeof window._driftRenderConjunction === 'function') {
+          renderGlobe()
+        } else {
+          const started = Date.now()
+          const globePoll = setInterval(() => {
+            if (typeof window._driftRenderConjunction === 'function') {
+              clearInterval(globePoll)
+              renderGlobe()
+            } else if (Date.now() - started > 10_000) {
+              clearInterval(globePoll)
+            }
+          }, 200)
         }
-      } catch (err) {
-        console.error('[DriftZero] load failed:', err)
-      } finally {
-        if (!cancelled) setLoading(false)
+      } catch {
+        // Globe wiring is optional — no /api/satellite endpoint yet
       }
     }
 
@@ -148,14 +122,26 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
     const interval = setInterval(load, 60_000)
     return () => {
       cancelled = true
+      controller.abort()
       clearInterval(interval)
     }
   }, [selectedNoradId])
 
-  // Reset maneuver selection when conjunction changes
+  // Slide panels in after activation
+  useEffect(() => {
+    if (activated) {
+      const t = setTimeout(() => setCollapsed(null), 300)
+      return () => clearTimeout(t)
+    }
+  }, [activated])
+
+  const [isDragging, setIsDragging] = useState(false)
+  const [dividerHover, setDividerHover] = useState(false)
+  const tabDragMoved = useRef(false)
+
   const handleSelectConjunction = useCallback((c) => {
     setSelectedConjunction(c)
-    setSelectedManeuverLabel(null)
+    setSelectedManeuver(null)
   }, [])
 
   // ── Satellite selection from GlobeView ────────────────────────────────────
@@ -171,13 +157,8 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
     })
   }, [])
 
-  const handleSatClose = useCallback(() => {
-    satStore.onClose?.()
-  }, [])
-
-  const handleSatAnalyze = useCallback(() => {
-    satStore.onAnalyze?.()
-  }, [])
+  const handleSatClose = useCallback(() => { satStore.onClose?.() }, [])
+  const handleSatAnalyze = useCallback(() => { satStore.onAnalyze?.() }, [])
 
   // ── Drag-to-resize ──────────────────────────────────────────────────────────
   const onDividerMouseDown = useCallback((e) => {
@@ -202,7 +183,7 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
     }
   }, [isDragging])
 
-  // ── Sync CSS vars → globe wrapper reads these to shift itself ───────────────
+  // ── Sync CSS vars ───────────────────────────────────────────────────────────
   useEffect(() => {
     const activePct = collapsed === 'panels' ? 0 : panelPct
     document.documentElement.style.setProperty('--panel-pct', activePct)
@@ -219,14 +200,13 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
     }
   }
 
-  // ── Derived widths ──────────────────────────────────────────────────────────
-  const panelWidth = collapsed === 'panels' ? '0%' : `${panelPct}%`
+  const panelWidth   = collapsed === 'panels' ? '0%' : `${panelPct}%`
   const dividerRight = collapsed === 'panels' ? 0 : `${panelPct}%`
-  const transition = isDragging ? 'none' : 'width 0.25s ease, right 0.25s ease'
+  const transition   = isDragging ? 'none' : 'width 0.25s ease, right 0.25s ease'
 
   return (
     <>
-      {/* ── StatsBar — top (hidden until activated) ─────────────────────────── */}
+      {/* ── StatsBar ─────────────────────────────────────────────────────────── */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
         pointerEvents: activated ? 'auto' : 'none',
@@ -234,7 +214,7 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
         transform: activated ? 'translateY(0)' : 'translateY(-100%)',
         transition: 'opacity 0.5s ease 0.4s, transform 0.5s ease 0.4s',
       }}>
-        <StatsBar stats={stats} />
+        <StatsBar stats={stats} isLive={isLive} />
       </div>
 
       {/* ── Right panel ──────────────────────────────────────────────────────── */}
@@ -256,14 +236,10 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
           borderLeft: '1px solid rgba(255,255,255,0.07)',
-          overflowY: 'auto',
-          overflowX: 'hidden',
           display: 'flex',
           flexDirection: 'column',
         }}>
           {selectedSat ? (
-            /* ── Satellite selected: show satellite info panel ── */
-            /* key forces remount + re-animation on each new satellite */
             <SatelliteModal
               key={selectedSat.id}
               sat={selectedSat}
@@ -274,33 +250,86 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
               inline
             />
           ) : (
-            /* ── Default: conjunction queue + detail panels ── */
             <>
-              <AlertQueue
-                conjunctions={conjunctions}
-                selected={selectedConjunction}
-                onSelect={handleSelectConjunction}
-              />
-              {selectedConjunction && (
-                <>
-                  <NaturalLanguageAlert conjunction={selectedConjunction} />
-                  <ManeuverPanel
-                    conjunction={selectedConjunction}
-                    onManeuverSelect={setSelectedManeuverLabel}
-                  />
-                  <CascadeAnalysis
-                    conjunction={selectedConjunction}
-                    conjunctions={conjunctions}
-                    selectedManeuverLabel={selectedManeuverLabel}
-                  />
-                </>
-              )}
+              {/* ── Mode tab bar ──────────────────────────────────────────────── */}
+              <div style={{
+                display: 'flex',
+                borderBottom: '1px solid rgba(255,255,255,0.07)',
+                flexShrink: 0,
+              }}>
+                {['shield', 'rogue'].map(mode => {
+                  const active = activeMode === mode
+                  return (
+                    <button
+                      key={mode}
+                      onClick={() => setActiveMode(mode)}
+                      style={{
+                        flex: 1,
+                        padding: '10px 0',
+                        background: 'transparent',
+                        border: 'none',
+                        borderBottom: active ? '2px solid #22d3ee' : '2px solid transparent',
+                        color: active ? '#22d3ee' : '#64748b',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: '0.1em',
+                        textTransform: 'uppercase',
+                        cursor: 'pointer',
+                        transition: 'color 0.15s, border-color 0.15s',
+                      }}
+                    >
+                      {mode === 'shield' ? 'Shield' : 'Rogue'}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* ── Shield panel (keep mounted, hide when rogue active) ───────── */}
+              <div style={{
+                display: activeMode === 'shield' ? 'flex' : 'none',
+                flexDirection: 'column',
+                flex: 1,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+              }}>
+                <AlertQueue
+                  conjunctions={conjunctions}
+                  loading={conjunctionsLoading}
+                  selected={selectedConjunction}
+                  onSelect={handleSelectConjunction}
+                />
+                {selectedConjunction && (
+                  <>
+                    <NaturalLanguageAlert conjunction={selectedConjunction} />
+                    <ManeuverPanel
+                      conjunction={selectedConjunction}
+                      onManeuverSelect={setSelectedManeuver}
+                    />
+                    <CascadeAnalysis
+                      conjunction={selectedConjunction}
+                      conjunctions={conjunctions}
+                      selectedManeuverLabel={selectedManeuver}
+                    />
+                  </>
+                )}
+              </div>
+
+              {/* ── Rogue panel (keep mounted, hide when shield active) ───────── */}
+              <div style={{
+                display: activeMode === 'rogue' ? 'flex' : 'none',
+                flexDirection: 'column',
+                flex: 1,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+              }}>
+                <RoguePanel visible={activeMode === 'rogue'} />
+              </div>
             </>
           )}
         </div>
       </div>
 
-      {/* ── Divider — hidden until activated ────────────────────────────────── */}
+      {/* ── Divider ──────────────────────────────────────────────────────────── */}
       <div
         onMouseDown={activated ? onDividerMouseDown : undefined}
         onMouseEnter={() => setDividerHover(true)}
@@ -323,17 +352,14 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
               : 'transparent',
         }}
       >
-        {/* Always-visible collapse/expand tab */}
         <button
           onMouseDown={(e) => {
             e.stopPropagation()
             tabDragMoved.current = false
-            // Start the drag — if mouse never moves, we treat it as a click
             setIsDragging(true)
             setCollapsed(null)
           }}
-          onClick={(e) => {
-            // Only toggle if the mousedown didn't turn into a real drag
+          onClick={() => {
             if (!tabDragMoved.current) toggleCollapse()
           }}
           style={{
@@ -370,7 +396,6 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
         </button>
       </div>
 
-      {/* Cursor style during drag */}
       {isDragging && (
         <style>{`* { cursor: col-resize !important; user-select: none !important; }`}</style>
       )}

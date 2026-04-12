@@ -86,15 +86,17 @@ const severity = {
   normal: '#94a3b8',
 }
 
-export default function StatsBar({ stats = {} }) {
+export default function StatsBar({ stats = {}, isLive = false }) {
   const {
     activeSatellites   = 0,
     activeConjunctions = 0,
     criticalAlerts     = 0,
+    maxCollisionProb   = 0,
     avgCollisionProb   = 0,
   } = stats
 
-  const probDisplay = (avgCollisionProb * 100).toExponential(2) + '%'
+  const prob = maxCollisionProb || avgCollisionProb
+  const probDisplay = prob < 1e-12 ? '< 1e-10%' : (prob * 100).toExponential(2) + '%'
 
   return (
     <div style={S.bar}>
