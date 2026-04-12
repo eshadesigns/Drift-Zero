@@ -70,8 +70,8 @@ export default function NaturalLanguageAlert({ conjunction, alerts = [] }) {
     <div style={{
       margin: '0 10px 6px',
       borderRadius: 6,
-      background: `${color}0d`,
-      border: `1px solid ${color}33`,
+      background: 'rgba(192, 132, 252, 0.05)',
+      border: '1px solid rgba(192, 132, 252, 0.18)',
       padding: '12px 14px',
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>

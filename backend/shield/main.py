@@ -33,6 +33,7 @@ import json
 import logging
 import math
 import os
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -42,11 +43,13 @@ from typing import Optional
 import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.shield.propagate import parse_satrec
 from backend.shield.tca import find_tca
 from backend.shield.probability import compute_probability
 from backend.shield.maneuver import compute_maneuvers
+from backend.shield.cascade import compute_cascade, LABEL_SLUGS
 
 # ── Config ────────────────────────────────────────────────────────────────────
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
@@ -85,7 +88,7 @@ SPACETRACK_DEBRIS_URL = (
 
 CATALOG_LIMIT         = 1000        # total threat catalog size (full run, split evenly)
 DRY_RUN_CATALOG_LIMIT = 200         # total threat catalog size (--dry-run)
-MAX_TCA_WORKERS       = 6           # parallel TCA threads
+MAX_TCA_WORKERS       = 12          # parallel TCA threads
 MAX_TCA_PAIRS         = 5000        # cap after screening to keep runtime manageable
 
 MISS_FILTER_KM = 1000.0
@@ -425,12 +428,21 @@ def _run_tca_pair(
             "name":        rec_a.get("OBJECT_NAME", ""),
             "tle_epoch":   rec_a.get("EPOCH", ""),
             "object_type": rec_a.get("OBJECT_TYPE", "UNKNOWN"),
+            "tle_line1":   rec_a.get("TLE_LINE1", ""),
+            "tle_line2":   rec_a.get("TLE_LINE2", ""),
         },
         "secondary": {
-            "norad_id":    int(rec_b.get("NORAD_CAT_ID", 0)),
-            "name":        rec_b.get("OBJECT_NAME", ""),
-            "tle_epoch":   rec_b.get("EPOCH", ""),
-            "object_type": sec_type,
+            "norad_id":       int(rec_b.get("NORAD_CAT_ID", 0)),
+            "name":           rec_b.get("OBJECT_NAME", ""),
+            "tle_epoch":      rec_b.get("EPOCH", ""),
+            "object_type":    sec_type,
+            "tle_line1":      rec_b.get("TLE_LINE1", ""),
+            "tle_line2":      rec_b.get("TLE_LINE2", ""),
+            "inclination_deg": rec_b.get("INCLINATION"),
+            "apoapsis_km":    rec_b.get("APOAPSIS"),
+            "periapsis_km":   rec_b.get("PERIAPSIS"),
+            "country_code":   rec_b.get("COUNTRY_CODE", ""),
+            "launch_date":    rec_b.get("LAUNCH_DATE", ""),
         },
         "tca_utc":                result["tca_utc"],
         "miss_distance_km":       round(miss, 4),
@@ -574,12 +586,12 @@ def run_pipeline(
     kp_index = _fetch_kp()
 
     # 1. Auth + fetch primary satellite
-    session      = _spacetrack_session()
+    session      = _get_session()
     primary_rec  = fetch_single_satellite(session, norad_id)
     primary_name = primary_rec.get("OBJECT_NAME", f"NORAD {norad_id}")
 
-    # 2. Fetch threat catalog; remove user's own satellite if present
-    catalog = fetch_threat_catalog(session, catalog_limit)
+    # 2. Fetch threat catalog (cached for 5 min); remove user's own satellite if present
+    catalog = _get_threat_catalog(session, catalog_limit)
     catalog = [r for r in catalog if str(r.get("NORAD_CAT_ID")) != str(norad_id)]
     log.info("Threat catalog after dedup: %d objects", len(catalog))
 
@@ -600,6 +612,15 @@ def run_pipeline(
 
     sat_by_norad    = {r.get("NORAD_CAT_ID"): s for r, s in parsed_catalog}
     catalog_records = [r for r, _ in parsed_catalog]
+
+    # Store pipeline state for cascade analysis
+    _pipeline_cache[norad_id] = {
+        "primary_rec":     primary_rec,
+        "primary_sat":     primary_sat,
+        "catalog_records": catalog_records,
+        "sat_by_norad":    sat_by_norad,
+        "t_start":         t_start,
+    }
 
     # 4. Screen primary against catalog
     log.info("Screening %s against %d catalog objects...", primary_name, len(catalog_records))
@@ -696,10 +717,74 @@ def run_pipeline(
 
 app = FastAPI(title="Drift Zero -- Shield API", version="0.2.0")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
+
 # Simple in-memory cache: norad_id -> list of conjunction event dicts.
 # Populated by GET /conjunctions/{norad_id}; read by GET /maneuvers/{norad_id}/{event_id}.
 # No expiry needed for demo use.
 _conjunction_cache: dict[int, list[dict]] = {}
+
+# Pipeline state cache: norad_id -> {primary_rec, primary_sat, catalog_records,
+# sat_by_norad, t_start}. Populated by run_pipeline(); read by GET /cascade.
+_pipeline_cache: dict[int, dict] = {}
+
+# ── 5-minute threat-catalog cache ────────────────────────────────────────────
+# Avoids re-fetching ~1000 Space-Track objects on every API call.
+_catalog_cache: dict = {}       # keys: catalog, limit, expires_at
+_CATALOG_TTL = 300              # seconds
+
+# ── Session cache ─────────────────────────────────────────────────────────────
+# Re-uses the authenticated requests.Session across calls within a 4.5-min window.
+_session_store: dict = {}       # keys: session, expires_at
+_SESSION_TTL = 270              # re-auth before Space-Track's ~5-min idle timeout
+
+
+def _get_session() -> requests.Session:
+    """Return a cached Space-Track session, re-authenticating as needed."""
+    now = time.monotonic()
+    if _session_store.get("session") and _session_store.get("expires_at", 0) > now:
+        log.info("Space-Track: reusing cached session")
+        return _session_store["session"]
+    session = _spacetrack_session()
+    _session_store["session"]    = session
+    _session_store["expires_at"] = now + _SESSION_TTL
+    return session
+
+
+def _get_threat_catalog(session: requests.Session, limit: int) -> list[dict]:
+    """
+    Return the LEO threat catalog, serving from a 5-minute in-memory cache
+    when available so repeated calls for different NORAD IDs skip the
+    two-request Space-Track round-trip.
+    """
+    now    = time.monotonic()
+    cached = _catalog_cache
+    if (
+        cached.get("catalog") is not None
+        and cached.get("limit") == limit
+        and cached.get("expires_at", 0) > now
+    ):
+        log.info(
+            "Threat catalog: serving %d objects from cache (%.0fs remaining)",
+            len(cached["catalog"]),
+            cached["expires_at"] - now,
+        )
+        return cached["catalog"]
+
+    catalog = fetch_threat_catalog(session, limit)
+    _catalog_cache["catalog"]    = catalog
+    _catalog_cache["limit"]      = limit
+    _catalog_cache["expires_at"] = now + _CATALOG_TTL
+    log.info(
+        "Threat catalog: fetched and cached %d objects (TTL %ds)",
+        len(catalog), _CATALOG_TTL,
+    )
+    return catalog
 
 
 @app.get("/satellite/{norad_id}")
@@ -709,7 +794,7 @@ async def get_satellite(norad_id: int):
     Use this to confirm a satellite exists before running a full conjunction check.
     """
     try:
-        session = _spacetrack_session()
+        session = _get_session()
         rec     = fetch_single_satellite(session, norad_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -728,6 +813,8 @@ async def get_satellite(norad_id: int):
         "periapsis_km":    rec.get("PERIAPSIS"),
         "eccentricity":    rec.get("ECCENTRICITY"),
         "tle_epoch":       rec.get("EPOCH", ""),
+        "tle_line1":       rec.get("TLE_LINE1", ""),
+        "tle_line2":       rec.get("TLE_LINE2", ""),
     }
 
 
@@ -754,8 +841,11 @@ async def get_maneuvers(norad_id: int, event_id: str):
     event = next((e for e in events if e["event_id"] == event_id), None)
     if event is None:
         raise HTTPException(
-            status_code=404,
-            detail=f"Event {event_id!r} not found in cached results for NORAD {norad_id}",
+            status_code=409,
+            detail=(
+                f"Event {event_id!r} not found for NORAD {norad_id}. "
+                "Conjunction data has refreshed — please reselect an event."
+            ),
         )
 
     return compute_maneuvers(event)
@@ -790,6 +880,87 @@ async def get_conjunctions(
         "returned":       min(len(filtered), limit),
         "events":         filtered[:limit],
     }
+
+
+@app.get("/cascade/{norad_id}/{event_id}/{maneuver_label}")
+async def get_cascade(norad_id: int, event_id: str, maneuver_label: str):
+    """
+    Compute downstream conjunction risks introduced or worsened by a maneuver.
+
+    maneuver_label must be one of: maximum_safety, balanced, fuel_efficient.
+
+    Requires that GET /conjunctions/{norad_id} has been called first to populate
+    the conjunction cache and pipeline state cache.
+    Returns 409 if either cache is empty.
+    """
+    valid_labels = set(LABEL_SLUGS.keys())
+    if maneuver_label not in valid_labels:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Invalid maneuver_label {maneuver_label!r}. "
+                f"Must be one of: {sorted(valid_labels)}"
+            ),
+        )
+
+    events = _conjunction_cache.get(norad_id)
+    if events is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"No conjunction data cached for NORAD {norad_id}. "
+                f"Call GET /conjunctions/{norad_id} first."
+            ),
+        )
+
+    pipeline = _pipeline_cache.get(norad_id)
+    if pipeline is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"No pipeline state cached for NORAD {norad_id}. "
+                f"Call GET /conjunctions/{norad_id} first."
+            ),
+        )
+
+    event = next((e for e in events if e["event_id"] == event_id), None)
+    if event is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Event {event_id!r} not found for NORAD {norad_id}. "
+                "Conjunction data has refreshed — please reselect an event."
+            ),
+        )
+
+    # Resolve slug -> display label and build a minimal maneuver dict
+    display_label = LABEL_SLUGS[maneuver_label]
+    maneuvers_result = compute_maneuvers(event)
+    maneuver = next(
+        (m for m in maneuvers_result["maneuver_options"] if m["label"] == display_label),
+        None,
+    )
+    if maneuver is None:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not find maneuver option {display_label!r} in computed options",
+        )
+
+    try:
+        result = compute_cascade(
+            event=event,
+            maneuver=maneuver,
+            primary_rec=pipeline["primary_rec"],
+            primary_sat=pipeline["primary_sat"],
+            catalog_records=pipeline["catalog_records"],
+            sat_by_norad=pipeline["sat_by_norad"],
+            original_events=events,
+            t_start=pipeline["t_start"],
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return result
 
 
 # ── CLI entry-point ───────────────────────────────────────────────────────────

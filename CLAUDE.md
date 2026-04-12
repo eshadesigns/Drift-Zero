@@ -158,5 +158,5 @@ DATABRICKS_TOKEN=...
 - Abhay: backend/shield — conjunction detection pipeline
 - Taher/Nikhil: Databricks pipeline, TLE ingestion, ML
 - Madhu: dashboard UI components
-- Kushagra: GlobeView, globe rendering — DO NOT MODIFY these files
+- Kushagra: GlobeView, globe rendering
 - Esha: Rogue, Anomaly detection
