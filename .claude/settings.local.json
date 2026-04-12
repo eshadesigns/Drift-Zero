@@ -8,7 +8,10 @@
       "Bash(python -c \"import databricks\")",
       "Bash(python -c \"import skyfield\")",
       "Bash(.venv\\\\Scripts\\\\pip install:*)",
-      "Bash(.venv/Scripts/pip install:*)"
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(source /c/Users/kkati/Kushagra/personal/Drift-Zero/venv/Scripts/activate)",
+      "Bash(echo \"Activated: $VIRTUAL_ENV\")",
+      "Bash(grep -r \"def\\\\|class\" ./backend/rogue/*.py)"
     ]
   }
 }
