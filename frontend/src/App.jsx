@@ -7,6 +7,35 @@ import CascadeAnalysis from './components/dashboard/CascadeAnalysis'
 import SatelliteModal from './components/SatelliteModal'
 import RoguePanel from './components/RoguePanel'
 import { satStore } from './satStore'
+import { fetchConjunctions, deriveStats } from './api/shield'
+import { fleetStats as mockFleetStats, conjunctions as mockConjunctions, rogueActorPositions } from './data/mockData.js'
+import { SAT_ORBIT_PARAMS } from './data/satelliteOrbits'
+
+// ── Rogue orbit builder (mirrors GlobeView's simulateDebrisOrbit) ─────────────
+// Draws a circular orbit through the threat actor's lat/lon at its altitude,
+// using the target satellite's inclination as the orbital plane reference.
+function buildRogueOrbit(Cesium, { alt, inclination, lat = 0, lon = 0 }) {
+  const STEPS = 90
+  const altM  = alt * 1000
+  const inc   = Math.abs(inclination ?? 60) * Math.PI / 180
+  const lat0  = lat * Math.PI / 180
+  const lon0  = lon * Math.PI / 180
+  if (inc < 0.01) {
+    return Array.from({ length: STEPS + 1 }, (_, i) =>
+      Cesium.Cartesian3.fromRadians(lon0 + (i / STEPS) * 2 * Math.PI, 0, altM)
+    )
+  }
+  const sinU0 = Math.max(-1, Math.min(1, Math.sin(lat0) / Math.sin(inc)))
+  const u0    = Math.asin(sinU0)
+  const dLon0 = Math.atan2(Math.cos(inc) * Math.sin(u0), Math.cos(u0))
+  const lonAN = lon0 - dLon0
+  return Array.from({ length: STEPS + 1 }, (_, i) => {
+    const u    = u0 + (i / STEPS) * 2 * Math.PI
+    const lat  = Math.asin(Math.sin(inc) * Math.sin(u))
+    const dLon = Math.atan2(Math.cos(inc) * Math.sin(u), Math.cos(u))
+    return Cesium.Cartesian3.fromRadians(lonAN + dLon, lat, altM)
+  })
+}
 import { fetchConjunctions, fetchSatellite, deriveStats } from './api/shield'
 import { conjunctions as mockConjunctions } from './data/mockData.js'
 
@@ -15,10 +44,27 @@ const PANEL_MAX = 55
 const DEFAULT_PANEL = 30
 const EMPTY_STATS = { activeSatellites: 0, activeConjunctions: 0, criticalAlerts: 0, maxCollisionProb: 0 }
 
+// Maps NORAD IDs to the primarySatId strings used in conjunctions
+// Must match GlobeView.jsx SAT_TLES entity IDs exactly
+const NORAD_TO_SAT_ID = {
+  25544: 'ISS',
+  20580: 'HST',
+  44713: 'SL1',
+  47526: 'SL2',
+  28654: 'NOAA18',
+  25994: 'TERRA',
+  29499: 'METOP',
+  27424: 'AQUA',
+}
+
+export default function DashboardOverlay({ activated = false, noradId = 25544, demo = false, showAll = false, onRetarget }) {
 export default function DashboardOverlay({ activated = false, noradId = null }) {
   const [activeMode, setActiveMode] = useState('shield')   // 'shield' | 'rogue'
   const [selectedConjunction, setSelectedConjunction] = useState(null)
   const [selectedManeuver, setSelectedManeuver] = useState(null)  // slug for cascade
+  const [selectedRogue, setSelectedRogue] = useState(null)  // rogue actor clicked on globe
+  const [showDebrisOrbits, setShowDebrisOrbits] = useState(true)  // orbit layer toggles
+  const [showRogueOrbits, setShowRogueOrbits]   = useState(true)
   const [panelPct, setPanelPct] = useState(DEFAULT_PANEL)
   const [collapsed, setCollapsed] = useState('panels') // start hidden, open on activate
 
@@ -41,6 +87,14 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
     setSelectedConjunction(null)
     setSelectedManeuver(null)
     setIsLive(false)
+
+    if (demo) {
+      setConjunctions(mockConjunctions ?? [])
+      setIsLive(false)
+      setConjunctionsLoading(false)
+      setStats(mockFleetStats)
+      return
+    }
 
     const controller = new AbortController()
 
@@ -125,6 +179,7 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
       controller.abort()
       clearInterval(interval)
     }
+  }, [noradId, demo])
   }, [selectedNoradId])
 
   // Slide panels in after activation
@@ -157,8 +212,134 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
     })
   }, [])
 
+  // When user clicks a satellite on the globe → make it the persistent active target
+  useEffect(() => {
+    if (selectedSat?.noradId && onRetarget) {
+      onRetarget(selectedSat.noradId, selectedSat.id)
+    }
+  }, [selectedSat?.noradId])
+
   const handleSatClose = useCallback(() => { satStore.onClose?.() }, [])
   const handleSatAnalyze = useCallback(() => { satStore.onAnalyze?.() }, [])
+
+  // ── Rogue globe click → switch to Rogue tab + highlight ───────────────────
+  useEffect(() => {
+    const onRogueClick = (e) => {
+      setActiveMode('rogue')
+      setSelectedRogue(e.detail)  // e.detail = rogueActorPositions entry
+    }
+    window.addEventListener('drift-rogue-click', onRogueClick)
+    return () => window.removeEventListener('drift-rogue-click', onRogueClick)
+  }, [])
+
+  // ── Conjunction / focus derivation ────────────────────────────────────────
+  // Must be declared before any effects that reference focusedSatId.
+  //   • selectedSat (clicked from globe) takes priority — match by entity id
+  //   • otherwise use noradId (from Track input) mapped to primarySatId
+  const focusedSatId = selectedSat?.id || NORAD_TO_SAT_ID[noradId] || null
+
+  // Clear selected rogue when satellite focus changes
+  useEffect(() => { setSelectedRogue(null) }, [focusedSatId])
+
+  // ── Rogue icon visibility ──────────────────────────────────────────────────
+  // Show rogue actor icons for the focused satellite whenever analysis is active.
+  // No activeMode requirement — icons are visible in both Shield and Rogue tabs.
+  const rogueOrbitRefs = useRef([])
+
+  useEffect(() => {
+    const viewer = window._driftViewer
+    // Hide all icons first
+    if (viewer && !viewer.isDestroyed()) {
+      rogueActorPositions.forEach(r => {
+        const icon = viewer.entities.getById(r.id)
+        if (icon) icon.show = false
+      })
+    }
+    if (!activated || !demo || !focusedSatId || !viewer || viewer.isDestroyed()) return
+
+    const threats = rogueActorPositions.filter(r => r.targetId === focusedSatId)
+    threats.forEach(rogue => {
+      const icon = viewer.entities.getById(rogue.id)
+      if (icon) icon.show = true
+    })
+  }, [focusedSatId, demo, activated])
+
+  // ── Rogue threat orbit rings ───────────────────────────────────────────────
+  // Draws color-coded orbit rings around rogue actors.
+  // Gated by showRogueOrbits toggle. Still requires Rogue tab or focusedSatId.
+  useEffect(() => {
+    const viewer = window._driftViewer
+    const Cesium = window.Cesium
+
+    // Always clean up previous orbit polylines
+    rogueOrbitRefs.current.forEach(e => {
+      if (viewer && !viewer.isDestroyed()) try { viewer.entities.remove(e) } catch {}
+    })
+    rogueOrbitRefs.current = []
+
+    if (!activated || !demo || !focusedSatId || !showRogueOrbits
+        || !viewer || viewer.isDestroyed() || !Cesium) return
+
+    const primaryOrb = SAT_ORBIT_PARAMS[focusedSatId]
+    if (!primaryOrb) return
+
+    const threats = rogueActorPositions.filter(r => r.targetId === focusedSatId)
+
+    threats.forEach(rogue => {
+      const isAdversarial = rogue.severity === 'ADVERSARIAL'
+      const color = isAdversarial ? '#ef4444' : '#f59e0b'
+
+      try {
+        const positions = buildRogueOrbit(Cesium, {
+          alt:         rogue.alt,
+          inclination: primaryOrb.inclination,
+          lat:         rogue.lat,
+          lon:         rogue.lon,
+        })
+        if (positions.length < 2) return
+        const entity = viewer.entities.add({
+          polyline: {
+            positions,
+            width: isAdversarial ? 2.5 : 1.8,
+            material: new Cesium.PolylineGlowMaterialProperty({
+              glowPower: isAdversarial ? 0.35 : 0.2,
+              color: Cesium.Color.fromCssColorString(color).withAlpha(isAdversarial ? 0.75 : 0.55),
+            }),
+            arcType:           Cesium.ArcType.NONE,
+            depthFailMaterial: new Cesium.ColorMaterialProperty(
+              Cesium.Color.fromCssColorString(color).withAlpha(0.08)
+            ),
+          },
+        })
+        rogueOrbitRefs.current.push(entity)
+      } catch {}
+    })
+  }, [focusedSatId, showRogueOrbits, demo, activated])
+
+  // Cleanup orbit lines on unmount
+  useEffect(() => () => {
+    const viewer = window._driftViewer
+    rogueOrbitRefs.current.forEach(e => {
+      if (viewer && !viewer.isDestroyed()) try { viewer.entities.remove(e) } catch {}
+    })
+    if (viewer && !viewer.isDestroyed()) {
+      rogueActorPositions.forEach(r => {
+        const icon = viewer.entities.getById(r.id)
+        if (icon) icon.show = false
+      })
+    }
+  }, [])
+
+  // ── Conjunction filtering ─────────────────────────────────────────────────
+  const filteredConjunctions = (showAll || !focusedSatId)
+    ? conjunctions
+    : conjunctions.filter(c => c.primarySatId === focusedSatId)
+
+  // Reset selected conjunction when the focus changes to avoid stale state
+  useEffect(() => {
+    setSelectedConjunction(null)
+    setSelectedManeuver(null)
+  }, [focusedSatId, showAll])
 
   // ── Drag-to-resize ──────────────────────────────────────────────────────────
   const onDividerMouseDown = useCallback((e) => {
@@ -204,6 +385,50 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
   const dividerRight = collapsed === 'panels' ? 0 : `${panelPct}%`
   const transition   = isDragging ? 'none' : 'width 0.25s ease, right 0.25s ease'
 
+  // ── Orbit layer toggle row (rendered in both panel flows when focused) ──────
+  const orbitLayerToggles = focusedSatId ? (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '5px 12px',
+      borderBottom: '1px solid rgba(255,255,255,0.06)',
+      flexShrink: 0,
+      background: 'rgba(0,0,0,0.15)',
+    }}>
+      <span style={{ fontSize: 9, color: '#334155', letterSpacing: '0.1em', textTransform: 'uppercase', marginRight: 2, whiteSpace: 'nowrap' }}>
+        Orbit Layers
+      </span>
+      {[
+        { label: 'Debris', color: '#f97316', active: showDebrisOrbits, toggle: () => setShowDebrisOrbits(v => !v) },
+        { label: 'Threats', color: '#ef4444', active: showRogueOrbits, toggle: () => setShowRogueOrbits(v => !v) },
+      ].map(({ label, color, active, toggle }) => (
+        <button
+          key={label}
+          onClick={toggle}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            padding: '3px 9px',
+            border: `1px solid ${active ? color + '66' : 'rgba(255,255,255,0.1)'}`,
+            borderRadius: 5,
+            background: active ? `${color}18` : 'transparent',
+            color: active ? color : '#475569',
+            fontSize: 10, fontWeight: 600, cursor: 'pointer',
+            fontFamily: 'inherit', letterSpacing: '0.04em',
+            transition: 'all 0.15s',
+          }}
+        >
+          <span style={{
+            width: 7, height: 7, borderRadius: '50%',
+            background: active ? color : '#334155',
+            flexShrink: 0,
+            boxShadow: active ? `0 0 5px ${color}88` : 'none',
+            transition: 'all 0.15s',
+          }} />
+          {label}
+        </button>
+      ))}
+    </div>
+  ) : null
+
   return (
     <>
       {/* ── StatsBar ─────────────────────────────────────────────────────────── */}
@@ -214,7 +439,7 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
         transform: activated ? 'translateY(0)' : 'translateY(-100%)',
         transition: 'opacity 0.5s ease 0.4s, transform 0.5s ease 0.4s',
       }}>
-        <StatsBar stats={stats} isLive={isLive} />
+        <StatsBar stats={stats} isLive={isLive} onRetarget={onRetarget} trackedId={focusedSatId} />
       </div>
 
       {/* ── Right panel ──────────────────────────────────────────────────────── */}
@@ -240,15 +465,55 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
           flexDirection: 'column',
         }}>
           {selectedSat ? (
-            <SatelliteModal
-              key={selectedSat.id}
-              sat={selectedSat}
-              onClose={handleSatClose}
-              onAnalyze={handleSatAnalyze}
-              analyzed={satAnalyzed}
-              riskCount={satRiskCount}
-              inline
-            />
+            /* ── Satellite selected from globe: show modal + its conjunctions ── */
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+              <SatelliteModal
+                key={selectedSat.id}
+                sat={selectedSat}
+                onClose={handleSatClose}
+                onAnalyze={handleSatAnalyze}
+                analyzed={satAnalyzed}
+                riskCount={satRiskCount}
+                inline
+              />
+              {orbitLayerToggles}
+              {/* Divider */}
+              <div style={{ margin: '0 10px', borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: '#334155', textTransform: 'uppercase', paddingLeft: 4 }}>
+                  Conjunction Events
+                </span>
+              </div>
+              <AlertQueue
+                conjunctions={filteredConjunctions}
+                loading={conjunctionsLoading}
+                selected={selectedConjunction}
+                onSelect={(c) => { setSelectedConjunction(c); setSelectedManeuver(null) }}
+              />
+              {selectedConjunction && (
+                <>
+                  <NaturalLanguageAlert conjunction={selectedConjunction} />
+                  <ManeuverPanel
+                    conjunction={selectedConjunction}
+                    demo={demo}
+                    onSelectManeuver={setSelectedManeuver}
+                    showDebrisOrbits={showDebrisOrbits}
+                  />
+                  <CascadeAnalysis
+                    conjunction={selectedConjunction}
+                    selectedManeuver={selectedManeuver}
+                  />
+                </>
+              )}
+              {/* ── Rogue Intelligence for selected satellite ───────────────── */}
+              <div style={{ margin: '4px 10px 0', borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 4 }} />
+              <RoguePanel
+                visible
+                demo={demo}
+                focusedSatId={focusedSatId}
+                selectedRogue={selectedRogue}
+                compact
+              />
+            </div>
           ) : (
             <>
               {/* ── Mode tab bar ──────────────────────────────────────────────── */}
@@ -283,6 +548,7 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
                   )
                 })}
               </div>
+              {orbitLayerToggles}
 
               {/* ── Shield panel (keep mounted, hide when rogue active) ───────── */}
               <div style={{
@@ -293,7 +559,7 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
                 overflowX: 'hidden',
               }}>
                 <AlertQueue
-                  conjunctions={conjunctions}
+                  conjunctions={filteredConjunctions}
                   loading={conjunctionsLoading}
                   selected={selectedConjunction}
                   onSelect={handleSelectConjunction}
@@ -303,6 +569,9 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
                     <NaturalLanguageAlert conjunction={selectedConjunction} />
                     <ManeuverPanel
                       conjunction={selectedConjunction}
+                      demo={demo}
+                      onSelectManeuver={setSelectedManeuver}
+                      showDebrisOrbits={showDebrisOrbits}
                       onManeuverSelect={setSelectedManeuver}
                     />
                     <CascadeAnalysis
@@ -322,7 +591,7 @@ export default function DashboardOverlay({ activated = false, noradId = null }) 
                 overflowY: 'auto',
                 overflowX: 'hidden',
               }}>
-                <RoguePanel visible={activeMode === 'rogue'} />
+                <RoguePanel visible={activeMode === 'rogue'} demo={demo} focusedSatId={focusedSatId} selectedRogue={selectedRogue} />
               </div>
             </>
           )}

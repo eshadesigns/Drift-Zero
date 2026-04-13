@@ -42,15 +42,16 @@ from typing import Optional
 
 import requests
 from dotenv import load_dotenv
+from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.shield.propagate import parse_satrec
-from backend.shield.tca import find_tca
-from backend.shield.probability import compute_probability
-from backend.shield.maneuver import compute_maneuvers
-from backend.shield.cascade import compute_cascade, LABEL_SLUGS
-from backend.shield.maneuver_detector import extract_operator
+from shield.propagate import parse_satrec
+from shield.tca import find_tca
+from shield.probability import compute_probability
+from shield.maneuver import compute_maneuvers
+from shield.cascade import compute_cascade, LABEL_SLUGS
+from shield.maneuver_detector import extract_operator
 
 # ── Config ────────────────────────────────────────────────────────────────────
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
@@ -901,6 +902,7 @@ def run_pipeline(
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Drift Zero -- Shield API", version="0.2.0")
+router = APIRouter(prefix="/api")
 
 app.add_middleware(
     CORSMiddleware,
@@ -1003,8 +1005,8 @@ async def get_satellite(norad_id: int):
     }
 
 
-@app.get("/maneuvers/{norad_id}/{event_id}")
-async def get_maneuvers(norad_id: int, event_id: str):
+@router.get("/maneuvers/{norad_id}/{event_id}")
+async def get_maneuvers(norad_id: str, event_id: str):
     """
     Return three maneuver options for a specific conjunction event.
 
@@ -1013,7 +1015,8 @@ async def get_maneuvers(norad_id: int, event_id: str):
     (so the caller knows to run /conjunctions first rather than getting a
     misleading 404).
     """
-    events = _conjunction_cache.get(norad_id)
+    cache_key = int(norad_id) if norad_id.isdigit() else norad_id
+    events = _conjunction_cache.get(cache_key)
     if events is None:
         raise HTTPException(
             status_code=409,
@@ -1036,7 +1039,7 @@ async def get_maneuvers(norad_id: int, event_id: str):
     return compute_maneuvers(event)
 
 
-@app.get("/conjunctions/{norad_id}")
+@router.get("/conjunctions/{norad_id}")
 async def get_conjunctions(
     norad_id: int,
     min_risk: float = Query(default=0.0, ge=0.0, le=100.0),
@@ -1067,8 +1070,8 @@ async def get_conjunctions(
     }
 
 
-@app.get("/cascade/{norad_id}/{event_id}/{maneuver_label}")
-async def get_cascade(norad_id: int, event_id: str, maneuver_label: str):
+@router.get("/cascade/{norad_id}/{event_id}/{maneuver_label}")
+async def get_cascade(norad_id: str, event_id: str, maneuver_label: str):
     """
     Compute downstream conjunction risks introduced or worsened by a maneuver.
 
@@ -1088,7 +1091,8 @@ async def get_cascade(norad_id: int, event_id: str, maneuver_label: str):
             ),
         )
 
-    events = _conjunction_cache.get(norad_id)
+    cache_key = int(norad_id) if norad_id.isdigit() else norad_id
+    events = _conjunction_cache.get(cache_key)
     if events is None:
         raise HTTPException(
             status_code=409,
@@ -1098,7 +1102,7 @@ async def get_cascade(norad_id: int, event_id: str, maneuver_label: str):
             ),
         )
 
-    pipeline = _pipeline_cache.get(norad_id)
+    pipeline = _pipeline_cache.get(cache_key)
     if pipeline is None:
         raise HTTPException(
             status_code=409,
@@ -1147,6 +1151,8 @@ async def get_cascade(norad_id: int, event_id: str, maneuver_label: str):
 
     return result
 
+
+app.include_router(router)
 
 # ── CLI entry-point ───────────────────────────────────────────────────────────
 

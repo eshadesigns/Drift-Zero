@@ -1,3 +1,6 @@
+import { useState } from 'react'
+import { fleetStats as mockFleetStats } from '../../data/mockData'
+
 const S = {
   bar: {
     height: 44,
@@ -86,6 +89,11 @@ const severity = {
   normal: '#94a3b8',
 }
 
+export default function StatsBar({ stats: propStats, isLive = false, onRetarget, trackedId }) {
+  const fleetStats = propStats ?? mockFleetStats
+  const [searchVal, setSearchVal] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const prob = fleetStats.maxCollisionProb ?? fleetStats.avgCollisionProb ?? 0
 export default function StatsBar({ stats = {}, isLive = false }) {
   const {
     activeSatellites   = 0,
@@ -130,6 +138,89 @@ export default function StatsBar({ stats = {}, isLive = false }) {
           <span style={{ ...S.statValue, color: severity.medium }}>{probDisplay}</span>
         </div>
       </div>
+
+      {/* Satellite search */}
+      {onRetarget && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8, flexShrink: 0 }}>
+          {searchOpen ? (
+            <form
+              onSubmit={e => {
+                e.preventDefault()
+                const val = searchVal.trim()
+                if (val) { onRetarget(val); setSearchOpen(false); setSearchVal('') }
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+            >
+              <input
+                autoFocus
+                value={searchVal}
+                onChange={e => setSearchVal(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Escape') { setSearchOpen(false); setSearchVal('') } }}
+                placeholder="NORAD ID…"
+                style={{
+                  width: 100, height: 26,
+                  background: 'rgba(3,7,18,0.9)',
+                  border: '1px solid rgba(34,211,238,0.4)',
+                  borderRadius: 5, outline: 'none',
+                  color: '#e2e8f0', fontSize: 11,
+                  fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace",
+                  padding: '0 8px',
+                }}
+              />
+              <button type="submit" style={{
+                height: 26, padding: '0 10px', borderRadius: 5,
+                background: 'rgba(34,211,238,0.15)',
+                border: '1px solid rgba(34,211,238,0.4)',
+                color: '#22d3ee', fontSize: 11, fontWeight: 700,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}>Go</button>
+              <button type="button" onClick={() => { setSearchOpen(false); setSearchVal('') }} style={{
+                height: 26, width: 26, borderRadius: 5,
+                background: 'transparent',
+                border: '1px solid rgba(255,255,255,0.12)',
+                color: '#64748b', fontSize: 13,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>×</button>
+            </form>
+          ) : (
+            <button
+              onClick={() => setSearchOpen(true)}
+              title="Track a different satellite"
+              style={{
+                height: 26, padding: '0 10px', borderRadius: 5,
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                color: '#64748b', fontSize: 11, fontWeight: 600,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+                fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace",
+                transition: 'color 0.15s, border-color 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color='#94a3b8'; e.currentTarget.style.borderColor='rgba(255,255,255,0.25)' }}
+              onMouseLeave={e => { e.currentTarget.style.color='#64748b'; e.currentTarget.style.borderColor='rgba(255,255,255,0.12)' }}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <circle cx="4.5" cy="4.5" r="3.5" stroke="currentColor" strokeWidth="1.2"/>
+                <line x1="7.2" y1="7.2" x2="9.5" y2="9.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              </svg>
+              {trackedId ?? 'Track'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Live/Mock badge */}
+      <span style={{
+        fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+        color: isLive ? '#22d3ee' : '#64748b',
+        background: isLive ? 'rgba(34,211,238,0.1)' : 'rgba(100,116,139,0.1)',
+        border: `1px solid ${isLive ? 'rgba(34,211,238,0.3)' : 'rgba(100,116,139,0.3)'}`,
+        borderRadius: 4,
+        padding: '2px 7px',
+        marginLeft: 8,
+        flexShrink: 0,
+      }}>
+        {isLive ? 'LIVE' : 'MOCK'}
+      </span>
 
       <span style={S.timestamp}>
         {new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC

@@ -35,7 +35,7 @@ from typing import Optional
 import numpy as np
 from sgp4.api import Satrec
 
-from backend.shield.propagate import propagate_at
+from shield.propagate import propagate_at
 
 COARSE_STEP_S = 60.0
 WINDOW_S = 24 * 3600
