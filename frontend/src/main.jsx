@@ -42,6 +42,7 @@ function App() {
   const demoEntitiesRef = useRef([])
   const rogueEntitiesRef = useRef([])
   const selectedRogueIdRef = useRef(null)  // currently highlighted rogue entity ID
+  const [trackedNoradId, setTrackedNoradId] = useState(null)
 
   // Hide entities + start globe rotation on load, stop on activate
   useEffect(() => {
@@ -268,8 +269,10 @@ function App() {
 
     if (noradId) {
       setTimeout(() => window._driftFocusSat?.(noradId), 100)
-      setActiveNoradId(Number(noradId))
     }
+    // Store the entered NORAD ID so DashboardOverlay can run the pipeline for it
+    const parsed = parseInt(noradId, 10)
+    if (!isNaN(parsed) && parsed > 0) setTrackedNoradId(parsed)
     setActivated(true)
     setTimeout(() => setLandingMounted(false), 1000)
   }
@@ -343,6 +346,7 @@ function App() {
       {/* Dashboard — slides in after activation */}
       <StrictMode>
         <DashboardOverlay activated={activated} noradId={activeNoradId} demo={demoMode} showAll={showAllSats} onRetarget={handleRetarget} />
+        <DashboardOverlay activated={activated} noradId={trackedNoradId} />
       </StrictMode>
 
       {/* Mask GlobeView's own UI chrome during landing */}

@@ -37,8 +37,17 @@ export function normalizeConjunction(event) {
     severity:             riskToSeverity(riskScore),
     doNothingConfidence:  event.do_nothing_confidence ?? 0.5,
     lastUpdated:          event.timestamp_utc,
-    dataAgeMinutes:       event.data_age_minutes,
-    summary:              event.summary ?? '',
+    dataAgeMinutes:          event.data_age_minutes,
+    summary:                 event.summary ?? '',
+    primaryTleLine1:         event.primary?.tle_line1  ?? '',
+    primaryTleLine2:         event.primary?.tle_line2  ?? '',
+    secondaryTleLine1:       event.secondary?.tle_line1 ?? '',
+    secondaryTleLine2:       event.secondary?.tle_line2 ?? '',
+    secondaryInclinationDeg: event.secondary?.inclination_deg ?? null,
+    secondaryApoapsisKm:     event.secondary?.apoapsis_km     ?? null,
+    secondaryPeriapsisKm:    event.secondary?.periapsis_km    ?? null,
+    secondaryCountryCode:    event.secondary?.country_code    ?? '',
+    secondaryLaunchDate:     event.secondary?.launch_date     ?? '',
   }
 }
 
@@ -66,6 +75,14 @@ export async function fetchConjunctions(noradId, { minRisk = 0, limit = 100 } = 
   return { conjunctions, stats: deriveStats(conjunctions) }
 }
 
+// ── Fetch satellite info (name, TLE, orbital params) ─────────────────────────
+export async function fetchSatellite(noradId) {
+  const url = `${BASE_URL}/api/satellite/${noradId}`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Shield API ${res.status}: ${res.statusText}`)
+  return res.json()
+}
+
 // ── Mock fallbacks (used when backend has no pipeline cache for this event) ────
 // Shape matches the live API response so components need no special handling.
 const _MOCK_MANEUVERS = {
@@ -85,8 +102,8 @@ const _MOCK_CASCADE = {
   delta_v_ms: 0.94,
   candidates_screened: 847,
   cascade_risks: [
-    { norad_id: 48274, name: 'ISS DEB-051',     object_type: 'DEBRIS',  risk_type: 'new',      miss_distance_km: 12.4, original_miss_km: null },
-    { norad_id: 44713, name: 'STARLINK-5021',   object_type: 'PAYLOAD', risk_type: 'worsened', miss_distance_km: 3.1,  original_miss_km: 8.7  },
+    { norad_id: 48274, name: 'ISS DEB-051',   object_type: 'DEBRIS',  risk_type: 'new',      miss_distance_km: 12.4, original_miss_km: null, tca_utc: null },
+    { norad_id: 44713, name: 'STARLINK-5021', object_type: 'PAYLOAD', risk_type: 'worsened', miss_distance_km: 3.1,  original_miss_km: 8.7,  tca_utc: null },
   ],
 }
 

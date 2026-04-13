@@ -94,6 +94,16 @@ export default function StatsBar({ stats: propStats, isLive = false, onRetarget,
   const [searchVal, setSearchVal] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const prob = fleetStats.maxCollisionProb ?? fleetStats.avgCollisionProb ?? 0
+export default function StatsBar({ stats = {}, isLive = false }) {
+  const {
+    activeSatellites   = 0,
+    activeConjunctions = 0,
+    criticalAlerts     = 0,
+    maxCollisionProb   = 0,
+    avgCollisionProb   = 0,
+  } = stats
+
+  const prob = maxCollisionProb || avgCollisionProb
   const probDisplay = prob < 1e-12 ? '< 1e-10%' : (prob * 100).toExponential(2) + '%'
 
   return (
@@ -110,32 +120,22 @@ export default function StatsBar({ stats: propStats, isLive = false, onRetarget,
       <div style={S.stats}>
         <div style={S.stat}>
           <span style={S.statLabel}>Active Sats</span>
-          <span style={{ ...S.statValue, color: '#94a3b8' }}>{fleetStats.activeSatellites?.toLocaleString() ?? '—'}</span>
+          <span style={{ ...S.statValue, color: '#94a3b8' }}>{activeSatellites}</span>
         </div>
         <div style={S.divider} />
         <div style={S.stat}>
           <span style={S.statLabel}>Conjunctions</span>
-          <span style={{ ...S.statValue, color: severity.high }}>{fleetStats.activeConjunctions}</span>
+          <span style={{ ...S.statValue, color: severity.high }}>{activeConjunctions}</span>
         </div>
         <div style={S.divider} />
         <div style={S.stat}>
           <span style={S.statLabel}>Critical</span>
-          <span style={{ ...S.statValue, color: severity.critical }}>{fleetStats.criticalAlerts}</span>
+          <span style={{ ...S.statValue, color: severity.critical }}>{criticalAlerts}</span>
         </div>
         <div style={S.divider} />
         <div style={S.stat}>
-          <span style={S.statLabel}>Max P(collision)</span>
+          <span style={S.statLabel}>Avg P(collision)</span>
           <span style={{ ...S.statValue, color: severity.medium }}>{probDisplay}</span>
-        </div>
-        <div style={S.divider} />
-        <div style={S.stat}>
-          <span style={S.statLabel}>Tracked Objects</span>
-          <span style={{ ...S.statValue, color: '#94a3b8' }}>{fleetStats.totalTrackedObjects?.toLocaleString()}</span>
-        </div>
-        <div style={S.divider} />
-        <div style={S.stat}>
-          <span style={S.statLabel}>Maneuvers / mo</span>
-          <span style={{ ...S.statValue, color: '#94a3b8' }}>{fleetStats.maneuversThisMonth}</span>
         </div>
       </div>
 

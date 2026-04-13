@@ -36,10 +36,13 @@ function buildRogueOrbit(Cesium, { alt, inclination, lat = 0, lon = 0 }) {
     return Cesium.Cartesian3.fromRadians(lonAN + dLon, lat, altM)
   })
 }
+import { fetchConjunctions, fetchSatellite, deriveStats } from './api/shield'
+import { conjunctions as mockConjunctions } from './data/mockData.js'
 
 const PANEL_MIN = 15   // % of screen width
 const PANEL_MAX = 55
 const DEFAULT_PANEL = 30
+const EMPTY_STATS = { activeSatellites: 0, activeConjunctions: 0, criticalAlerts: 0, maxCollisionProb: 0 }
 
 // Maps NORAD IDs to the primarySatId strings used in conjunctions
 // Must match GlobeView.jsx SAT_TLES entity IDs exactly
@@ -55,6 +58,7 @@ const NORAD_TO_SAT_ID = {
 }
 
 export default function DashboardOverlay({ activated = false, noradId = 25544, demo = false, showAll = false, onRetarget }) {
+export default function DashboardOverlay({ activated = false, noradId = null }) {
   const [activeMode, setActiveMode] = useState('shield')   // 'shield' | 'rogue'
   const [selectedConjunction, setSelectedConjunction] = useState(null)
   const [selectedManeuver, setSelectedManeuver] = useState(null)  // slug for cascade
@@ -65,16 +69,23 @@ export default function DashboardOverlay({ activated = false, noradId = 25544, d
   const [collapsed, setCollapsed] = useState('panels') // start hidden, open on activate
 
   // ── Shield data ─────────────────────────────────────────────────────────────
+  const [selectedNoradId, setSelectedNoradId] = useState(noradId)
   const [conjunctions, setConjunctions] = useState([])
-  const [conjunctionsLoading, setConjunctionsLoading] = useState(true)
-  const [stats, setStats] = useState(mockFleetStats)
+  const [conjunctionsLoading, setConjunctionsLoading] = useState(false)
+  const [stats, setStats] = useState(EMPTY_STATS)
   const [isLive, setIsLive] = useState(false)
 
   useEffect(() => {
+    if (noradId && noradId !== selectedNoradId) setSelectedNoradId(noradId)
+  }, [noradId])
+
+  useEffect(() => {
+    if (!selectedNoradId) return
     let cancelled = false
     setConjunctionsLoading(true)
     setConjunctions([])
     setSelectedConjunction(null)
+    setSelectedManeuver(null)
     setIsLive(false)
 
     if (demo) {
@@ -86,30 +97,90 @@ export default function DashboardOverlay({ activated = false, noradId = 25544, d
     }
 
     const controller = new AbortController()
-    fetchConjunctions(noradId, { minRisk: 0, limit: 100 }, controller.signal)
-      .then(({ conjunctions: live, stats: liveStats }) => {
+
+    const load = async () => {
+      try {
+        const { conjunctions: live, stats: liveStats } = await fetchConjunctions(
+          selectedNoradId, { minRisk: 0, limit: 100 }, controller.signal
+        )
         if (cancelled) return
         setIsLive(true)
-        if (live.length > 0) {
-          setConjunctions(live)
-          setStats(prev => ({ ...prev, ...liveStats }))
-        } else {
-          setConjunctions(mockConjunctions ?? [])
-        }
-      })
-      .catch((err) => {
+        setStats(prev => ({ ...prev, ...liveStats }))
+        setConjunctions(live.length > 0 ? live : (mockConjunctions ?? []))
+      } catch (err) {
         if (cancelled || err.name === 'AbortError') return
         setConjunctions(mockConjunctions ?? [])
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setConjunctionsLoading(false)
-      })
+      }
 
+      // Fetch satellite TLE for globe rendering — non-fatal if endpoint missing
+      if (cancelled) return
+      try {
+        const satInfo = await fetchSatellite(selectedNoradId)
+        if (cancelled) return
+
+        const primaryTle = {
+          name:        satInfo.name,
+          norad_id:    selectedNoradId,
+          tle_line1:   satInfo.tle_line1,
+          tle_line2:   satInfo.tle_line2,
+          alt:         (satInfo.apoapsis_km != null && satInfo.periapsis_km != null)
+                         ? Math.round((parseFloat(satInfo.apoapsis_km) + parseFloat(satInfo.periapsis_km)) / 2)
+                         : null,
+          inclination: satInfo.inclination_deg != null ? +parseFloat(satInfo.inclination_deg).toFixed(2) : null,
+          period:      satInfo.period_min      != null ? +parseFloat(satInfo.period_min).toFixed(2)      : null,
+          country:     satInfo.country_code    || null,
+          launched:    satInfo.launch_date     || null,
+          object_type: satInfo.object_type     || null,
+        }
+
+        const seen = new Set()
+        const threatTles = conjunctions
+          .filter(c => c.secondaryTleLine1 && c.secondaryTleLine2)
+          .map(c => ({
+            name:        c.secondarySatName,
+            norad_id:    c.secondarySatId,
+            tle_line1:   c.secondaryTleLine1,
+            tle_line2:   c.secondaryTleLine2,
+            alt:         (c.secondaryApoapsisKm != null && c.secondaryPeriapsisKm != null)
+                           ? Math.round((parseFloat(c.secondaryApoapsisKm) + parseFloat(c.secondaryPeriapsisKm)) / 2)
+                           : null,
+            inclination: c.secondaryInclinationDeg != null ? +parseFloat(c.secondaryInclinationDeg).toFixed(2) : null,
+            country:     c.secondaryCountryCode || null,
+            launched:    c.secondaryLaunchDate  || null,
+            object_type: 'satellite',
+          }))
+          .filter(t => { if (seen.has(t.norad_id)) return false; seen.add(t.norad_id); return true })
+
+        const renderGlobe = () => window._driftRenderConjunction?.(primaryTle, threatTles)
+        if (typeof window._driftRenderConjunction === 'function') {
+          renderGlobe()
+        } else {
+          const started = Date.now()
+          const globePoll = setInterval(() => {
+            if (typeof window._driftRenderConjunction === 'function') {
+              clearInterval(globePoll)
+              renderGlobe()
+            } else if (Date.now() - started > 10_000) {
+              clearInterval(globePoll)
+            }
+          }, 200)
+        }
+      } catch {
+        // Globe wiring is optional — no /api/satellite endpoint yet
+      }
+    }
+
+    load()
+    const interval = setInterval(load, 60_000)
     return () => {
       cancelled = true
       controller.abort()
+      clearInterval(interval)
     }
   }, [noradId, demo])
+  }, [selectedNoradId])
 
   // Slide panels in after activation
   useEffect(() => {
@@ -122,6 +193,11 @@ export default function DashboardOverlay({ activated = false, noradId = 25544, d
   const [isDragging, setIsDragging] = useState(false)
   const [dividerHover, setDividerHover] = useState(false)
   const tabDragMoved = useRef(false)
+
+  const handleSelectConjunction = useCallback((c) => {
+    setSelectedConjunction(c)
+    setSelectedManeuver(null)
+  }, [])
 
   // ── Satellite selection from GlobeView ────────────────────────────────────
   const [selectedSat, setSelectedSat] = useState(null)
@@ -486,7 +562,7 @@ export default function DashboardOverlay({ activated = false, noradId = 25544, d
                   conjunctions={filteredConjunctions}
                   loading={conjunctionsLoading}
                   selected={selectedConjunction}
-                  onSelect={(c) => { setSelectedConjunction(c); setSelectedManeuver(null) }}
+                  onSelect={handleSelectConjunction}
                 />
                 {selectedConjunction && (
                   <>
@@ -496,10 +572,12 @@ export default function DashboardOverlay({ activated = false, noradId = 25544, d
                       demo={demo}
                       onSelectManeuver={setSelectedManeuver}
                       showDebrisOrbits={showDebrisOrbits}
+                      onManeuverSelect={setSelectedManeuver}
                     />
                     <CascadeAnalysis
                       conjunction={selectedConjunction}
-                      selectedManeuver={selectedManeuver}
+                      conjunctions={conjunctions}
+                      selectedManeuverLabel={selectedManeuver}
                     />
                   </>
                 )}
